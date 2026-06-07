@@ -10,8 +10,9 @@ The hardware analysis runs **100 % client-side**. Only the optional model catalo
 
 ## Features
 
-- 🔍 **Browser hardware detection** — CPU threads (`navigator.hardwareConcurrency`), RAM (`navigator.deviceMemory`) and GPU name (WebGL `WEBGL_debug_renderer_info` + WebGPU). Apple Silicon is detected as **Unified Memory**.
-- ✏️ **Editable values** — browsers can't read RAM/VRAM exactly (`deviceMemory` is capped at 8 GB), so every value can be overridden. Recommendations update live.
+- 🔍 **Browser hardware detection** — CPU cores (`navigator.hardwareConcurrency`) and GPU name (WebGL `WEBGL_debug_renderer_info` + a high-performance WebGPU adapter). On **Apple Silicon** the chip (e.g. *Apple M4*) is mapped to its **P/E-core split, GPU cores, memory bandwidth and real RAM options**; on PCs the dedicated GPU is matched to a VRAM + bandwidth table.
+- ⚡ **Speed estimate (tok/s)** — rough decode speed from memory bandwidth ÷ active weights per token (unified memory or known GPU).
+- ✏️ **Editable values & RAM presets** — browsers can't read RAM/VRAM exactly (`deviceMemory` is rounded/capped), so values can be overridden — one-click presets for the detected Apple chip's configs. Recommendations update live.
 - 📚 **Two catalogs**
   - **Curated** — hand-picked 2026-era models with accurate parameter counts and MoE active-param info.
   - **🤗 HuggingFace (live)** — search or load trending GGUF repos straight from the HuggingFace API. Parameter size is parsed from the model name (incl. MoE like `30B-A3B` and `8x7B`).

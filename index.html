@@ -133,6 +133,12 @@
   .conf.estimated { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber); }
   .conf.manual { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
   .unified-tag { display:inline-flex; align-items:center; gap:5px; margin-top:7px; font-size:11.5px; color:var(--accent-2); background:color-mix(in srgb, var(--accent-2) 10%, transparent); border:1px solid color-mix(in srgb, var(--accent-2) 28%, transparent); padding:2px 8px; border-radius:999px; }
+  .ram-presets { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin-top:8px; }
+  .ram-chip { appearance:none; border:1px solid var(--border); background:var(--bg); color:var(--muted); font-family:inherit; font-size:12px; font-weight:650; padding:3px 10px; border-radius:7px; cursor:pointer; transition:.15s; }
+  .ram-chip:hover { color:var(--text); border-color:var(--accent-2); }
+  .ram-chip.active { background:var(--accent); color:var(--accent-ink); border-color:transparent; }
+  .ram-presets-hint { font-size:11px; color:var(--faint); }
+  .spec-line { display:inline-flex; align-items:center; gap:5px; }
   .hint { font-size: 13px; color: var(--faint); margin-top: 13px; display:flex; gap:8px; align-items:flex-start; }
   .hint .ic { color: var(--accent-2); margin-top:2px; }
   .hint b { color: var(--muted); font-weight:600; }
@@ -431,22 +437,57 @@ const BENCH = {
   "gpt-oss 120B":           { mmluPro: 90, gpqa: 81, swe: 62 },
 };
 
-/* ===== GPU VRAM lookup (GB) ===== */
-const GPU_VRAM = [
-  [/rtx\s*5090/i,32],[/rtx\s*5080/i,16],[/rtx\s*5070\s*ti/i,16],[/rtx\s*5070/i,12],[/rtx\s*5060\s*ti/i,16],[/rtx\s*5060/i,8],
-  [/rtx\s*4090/i,24],[/rtx\s*4080/i,16],[/rtx\s*4070\s*ti/i,12],[/rtx\s*4070/i,12],[/rtx\s*4060\s*ti/i,8],[/rtx\s*4060/i,8],
-  [/rtx\s*3090/i,24],[/rtx\s*3080\s*ti/i,12],[/rtx\s*3080/i,10],[/rtx\s*3070/i,8],[/rtx\s*3060\s*ti/i,8],[/rtx\s*3060/i,12],[/rtx\s*3050/i,8],
-  [/rtx\s*2080\s*ti/i,11],[/rtx\s*2080/i,8],[/rtx\s*2070/i,8],[/rtx\s*2060/i,6],[/gtx\s*1080\s*ti/i,11],[/gtx\s*1070/i,8],[/gtx\s*1660/i,6],[/gtx\s*1060/i,6],
-  [/h100/i,80],[/a100/i,40],[/l40s?/i,48],[/a6000/i,48],[/a5000/i,24],[/a4000/i,16],[/\bt4\b/i,16],
-  [/(rx\s*)?7900\s*xtx/i,24],[/(rx\s*)?7900\s*xt/i,20],[/(rx\s*)?7800\s*xt/i,16],[/(rx\s*)?7700\s*xt/i,12],[/(rx\s*)?6900\s*xt/i,16],[/(rx\s*)?6800/i,16],[/(rx\s*)?6700\s*xt/i,12],
-  [/arc\s*a770/i,16],[/arc\s*b580/i,12],[/arc\s*a750/i,8],
+/* ===== GPU lookup: [regex, VRAM GB, memory bandwidth GB/s] ===== */
+const GPUS = [
+  [/rtx\s*5090/i,32,1792],[/rtx\s*5080/i,16,960],[/rtx\s*5070\s*ti/i,16,896],[/rtx\s*5070/i,12,672],[/rtx\s*5060\s*ti/i,16,448],[/rtx\s*5060/i,8,448],
+  [/rtx\s*4090/i,24,1008],[/rtx\s*4080/i,16,717],[/rtx\s*4070\s*ti/i,12,672],[/rtx\s*4070/i,12,504],[/rtx\s*4060\s*ti/i,8,288],[/rtx\s*4060/i,8,272],
+  [/rtx\s*3090/i,24,936],[/rtx\s*3080\s*ti/i,12,912],[/rtx\s*3080/i,10,760],[/rtx\s*3070/i,8,448],[/rtx\s*3060\s*ti/i,8,448],[/rtx\s*3060/i,12,360],[/rtx\s*3050/i,8,224],
+  [/rtx\s*2080\s*ti/i,11,616],[/rtx\s*2080/i,8,448],[/rtx\s*2070/i,8,448],[/rtx\s*2060/i,6,336],[/gtx\s*1080\s*ti/i,11,484],[/gtx\s*1070/i,8,256],[/gtx\s*1660/i,6,192],[/gtx\s*1060/i,6,192],
+  [/h100/i,80,3350],[/a100/i,40,1555],[/l40s?/i,48,864],[/a6000/i,48,768],[/a5000/i,24,768],[/a4000/i,16,448],[/\bt4\b/i,16,320],
+  [/(rx\s*)?7900\s*xtx/i,24,960],[/(rx\s*)?7900\s*xt/i,20,800],[/(rx\s*)?7800\s*xt/i,16,624],[/(rx\s*)?7700\s*xt/i,12,432],[/(rx\s*)?6900\s*xt/i,16,512],[/(rx\s*)?6800/i,16,512],[/(rx\s*)?6700\s*xt/i,12,384],
+  [/arc\s*a770/i,16,560],[/arc\s*b580/i,12,456],[/arc\s*a750/i,8,512],
 ];
 
-const HW = { cores: null, ram: null, ramConf: "estimated", vram: null, vramConf: "estimated", unified: false, gpuName: "Unknown", platform: "" };
+/* ===== Apple Silicon database =====
+   Keyed by chip; per CPU-core-count bin: P/E cores, GPU cores, memory bandwidth (GB/s).
+   ram = real configurable options (GB). Values are typical/approximate.            */
+const APPLE_CHIPS = {
+  "M1":       { ram: [8,16],            bins: { 8:{p:4,e:4,gpu:8,bw:68} } },
+  "M1 Pro":   { ram: [16,32],           bins: { 10:{p:8,e:2,gpu:16,bw:200}, 8:{p:6,e:2,gpu:14,bw:200} } },
+  "M1 Max":   { ram: [32,64],           bins: { 10:{p:8,e:2,gpu:32,bw:400} } },
+  "M1 Ultra": { ram: [64,128],          bins: { 20:{p:16,e:4,gpu:64,bw:800} } },
+  "M2":       { ram: [8,16,24],         bins: { 8:{p:4,e:4,gpu:10,bw:100} } },
+  "M2 Pro":   { ram: [16,32],           bins: { 12:{p:8,e:4,gpu:19,bw:200}, 10:{p:6,e:4,gpu:16,bw:200} } },
+  "M2 Max":   { ram: [32,64,96],        bins: { 12:{p:8,e:4,gpu:38,bw:400} } },
+  "M2 Ultra": { ram: [64,128,192],      bins: { 24:{p:16,e:8,gpu:76,bw:800} } },
+  "M3":       { ram: [8,16,24],         bins: { 8:{p:4,e:4,gpu:10,bw:100} } },
+  "M3 Pro":   { ram: [18,36],           bins: { 12:{p:6,e:6,gpu:18,bw:150}, 11:{p:5,e:6,gpu:14,bw:150} } },
+  "M3 Max":   { ram: [36,48,64,96,128], bins: { 16:{p:12,e:4,gpu:40,bw:400}, 14:{p:10,e:4,gpu:30,bw:300} } },
+  "M3 Ultra": { ram: [96,256,512],      bins: { 32:{p:24,e:8,gpu:80,bw:800} } },
+  "M4":       { ram: [16,24,32],        bins: { 10:{p:4,e:6,gpu:10,bw:120}, 8:{p:4,e:4,gpu:8,bw:120} } },
+  "M4 Pro":   { ram: [24,48,64],        bins: { 14:{p:10,e:4,gpu:20,bw:273}, 12:{p:8,e:4,gpu:16,bw:273} } },
+  "M4 Max":   { ram: [36,48,64,128],    bins: { 16:{p:12,e:4,gpu:40,bw:546}, 14:{p:10,e:4,gpu:32,bw:410} } },
+};
+function parseAppleChip(renderer, cores) {
+  const m = (renderer || "").match(/Apple\s+(M\d)(?:\s+(Pro|Max|Ultra))?/i);
+  if (!m) return null;
+  const key = "M" + m[1].slice(1) + (m[2] ? " " + m[2][0].toUpperCase() + m[2].slice(1).toLowerCase() : "");
+  const chip = APPLE_CHIPS[key];
+  if (!chip) return { key, ram: [16, 24, 32], bin: null };
+  const bin = chip.bins[cores] || chip.bins[Object.keys(chip.bins)[0]];
+  return { key, ram: chip.ram, bin };
+}
+
+const HW = {
+  cores: null, ram: null, ramConf: "estimated", vram: null, vramConf: "estimated",
+  unified: false, gpuName: "Unknown", platform: "",
+  chip: null, cpuP: null, cpuE: null, gpuCores: null, bandwidth: null, gpuBandwidth: null, ramOptions: null,
+};
 
 /* ===== Hardware detection ===== */
 async function detectHardware() {
   HW.cores = navigator.hardwareConcurrency || null;
+  // userAgentData.platform is more accurate than navigator.platform (which says "MacIntel" on Apple Silicon)
   HW.platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
 
   let renderer = "";
@@ -460,9 +501,10 @@ async function detectHardware() {
     }
   } catch (e) {}
 
+  // WebGPU: request the high-performance adapter so dedicated GPUs win over an iGPU on laptops
   try {
     if (navigator.gpu) {
-      const adapter = await navigator.gpu.requestAdapter();
+      const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
       if (adapter) {
         let info = adapter.info;
         if (!info && adapter.requestAdapterInfo) { try { info = await adapter.requestAdapterInfo(); } catch (e) {} }
@@ -484,15 +526,27 @@ async function detectHardware() {
 
   if (isApple) {
     HW.unified = true;
-    HW.ram = dm && dm < 8 ? dm : 16;
+    const chip = parseAppleChip(renderer, HW.cores);
+    if (chip) {
+      HW.chip = chip.key;
+      HW.gpuName = "Apple " + chip.key;
+      HW.ramOptions = chip.ram;
+      if (chip.bin) { HW.cpuP = chip.bin.p; HW.cpuE = chip.bin.e; HW.gpuCores = chip.bin.gpu; HW.bandwidth = chip.bin.bw; }
+      // RAM is not readable; pick the chip's lowest config, but trust deviceMemory if it matches an option
+      let def = chip.ram[0];
+      if (dm && chip.ram.includes(dm)) def = dm;
+      HW.ram = def;
+    } else {
+      HW.ram = dm && dm < 8 ? dm : 16;
+    }
     HW.ramConf = "estimated";
     HW.vram = HW.ram; HW.vramConf = "estimated";
   } else {
     HW.ram = dm || 8;
     HW.ramConf = dm ? (dm >= 8 ? "estimated" : "measured") : "estimated";
-    let v = 0, found = false;
-    for (const [re, gb] of GPU_VRAM) { if (re.test(lower)) { v = gb; found = true; break; } }
-    if (found) { HW.vram = v; HW.vramConf = "estimated"; }
+    let v = 0, bw = null, found = false;
+    for (const [re, gb, b] of GPUS) { if (re.test(lower)) { v = gb; bw = b; found = true; break; } }
+    if (found) { HW.vram = v; HW.gpuBandwidth = bw; HW.vramConf = "estimated"; }
     else if (isIntegrated) { HW.vram = 0; HW.vramConf = "estimated"; if (renderer) HW.gpuName = renderer + " (integrated)"; }
     else { HW.vram = 0; HW.vramConf = "estimated"; }
   }
@@ -543,6 +597,24 @@ function speedLabel(fit, active) {
   if (fit === "offload") return "slow";
   if (fit === "tight")   return "borderline";
   return "—";
+}
+/* Rough decode speed from memory bandwidth: tok/s ≈ efficiency × BW ÷ (active weights read per token) */
+function estimateTokps(model, fit) {
+  let bw = null, eff = 0.65;
+  if (HW.unified && (fit === "gpu" || fit === "tight")) { bw = HW.bandwidth; eff = 0.62; }
+  else if (fit === "gpu") { bw = HW.gpuBandwidth; eff = 0.72; }
+  else if (fit === "cpu") { bw = 60; eff = 0.45; }            // typical desktop dual-channel DDR5
+  if (!bw) return null;
+  const activeBytesGB = (model.active || model.params) * QUANTS[state.quant].bpw / 8;
+  const t = eff * bw / activeBytesGB;
+  if (!isFinite(t) || t <= 0) return null;
+  return t >= 100 ? Math.round(t / 5) * 5 : t >= 10 ? Math.round(t) : +t.toFixed(1);
+}
+function speedHTML(model, fit, active) {
+  if (fit === "no") return "";
+  const t = estimateTokps(model, fit);
+  const label = t != null ? `~${t} tok/s` : speedLabel(fit, active);
+  return `${icon("gauge",13)} ${label}`;
 }
 
 /* ===== Commands ===== */
@@ -616,29 +688,42 @@ async function fetchHF(query) {
 function renderHardware() {
   const grid = document.getElementById("hwGrid");
   const confTxt = { measured: "measured", estimated: "estimated", manual: "manual" };
+
+  const cpuDetail = (HW.cpuP && HW.cpuE) ? `${HW.cpuP}P + ${HW.cpuE}E cores · ${esc(HW.platform || "")}` : esc(HW.platform || "");
+  const ramPresets = (HW.unified && HW.ramOptions)
+    ? `<div class="ram-presets">${HW.ramOptions.map(o => `<button class="ram-chip${o === HW.ram ? " active" : ""}" data-ram="${o}">${o}</button>`).join("")}<span class="ram-presets-hint">GB — pick yours</span></div>`
+    : `<div class="detail">editable — enter your real RAM</div>`;
+
+  let gpuDetailParts = [];
+  if (HW.gpuCores) gpuDetailParts.push(`${HW.gpuCores}-core GPU`);
+  const bw = HW.unified ? HW.bandwidth : HW.gpuBandwidth;
+  if (bw) gpuDetailParts.push(`~${bw} GB/s`);
+  const gpuSpec = gpuDetailParts.length ? `<div class="detail spec-line">${icon("zap",12)} ${gpuDetailParts.join(" · ")}</div>` : "";
+
   grid.innerHTML = `
     <div class="hw-cell">
       <div class="conf measured">measured</div>
       <div class="label">${icon("cpu",15)} Processor</div>
-      <div class="value">${HW.cores || "?"}<span class="unit">threads</span></div>
-      <div class="detail">${esc(HW.platform || "")}</div>
+      <div class="value">${HW.cores || "?"}<span class="unit">cores</span></div>
+      <div class="detail">${cpuDetail}</div>
     </div>
     <div class="hw-cell">
       <div class="conf ${HW.ramConf}">${confTxt[HW.ramConf]}</div>
-      <div class="label">${icon("memory-stick",15)} Memory (RAM)</div>
+      <div class="label">${icon("memory-stick",15)} ${HW.unified ? "Unified Memory" : "Memory (RAM)"}</div>
       <div class="value"><input type="number" id="ramInput" min="1" max="2048" step="1" value="${HW.ram}"><span class="unit">GB</span></div>
-      <div class="detail">editable — enter your real RAM</div>
+      ${ramPresets}
     </div>
     <div class="hw-cell">
       <div class="conf ${HW.vramConf}">${confTxt[HW.vramConf]}</div>
       <div class="label">${icon("microchip",15)} Graphics memory (VRAM)</div>
-      <div class="value"><input type="number" id="vramInput" min="0" max="200" step="1" value="${HW.vram}"><span class="unit">GB</span></div>
-      <div class="detail">${HW.unified ? `<span class="unified-tag">${icon("layers",13)} Unified Memory</span>` : "0 = no dedicated GPU"}</div>
+      <div class="value"><input type="number" id="vramInput" min="0" max="512" step="1" value="${HW.vram}"${HW.unified ? " disabled" : ""}><span class="unit">GB</span></div>
+      <div class="detail">${HW.unified ? `<span class="unified-tag">${icon("layers",13)} shared with RAM</span>` : "0 = no dedicated GPU"}</div>
     </div>
     <div class="hw-cell">
       <div class="conf estimated">detected</div>
       <div class="label">${icon("monitor",15)} Graphics card</div>
       <div class="value" style="font-size:14.5px;line-height:1.3;font-weight:650;">${esc(HW.gpuName)}</div>
+      ${gpuSpec}
       <div class="detail">
         <label class="switch" style="font-size:12px;margin-top:4px;">
           <input type="checkbox" id="unifiedToggle" ${HW.unified ? "checked" : ""}>
@@ -650,6 +735,7 @@ function renderHardware() {
   document.getElementById("ramInput").addEventListener("input", e => {
     HW.ram = Math.max(1, parseFloat(e.target.value) || 1); HW.ramConf = "manual";
     if (HW.unified) { HW.vram = HW.ram; document.getElementById("vramInput").value = HW.ram; }
+    document.querySelectorAll(".ram-chip").forEach(c => c.classList.toggle("active", +c.dataset.ram === HW.ram));
     renderModels();
   });
   document.getElementById("vramInput").addEventListener("input", e => {
@@ -659,6 +745,11 @@ function renderHardware() {
     HW.unified = e.target.checked; if (HW.unified) { HW.vram = HW.ram; }
     renderHardware(); renderModels();
   });
+  document.querySelectorAll(".ram-chip").forEach(chip => chip.addEventListener("click", () => {
+    HW.ram = +chip.dataset.ram; HW.ramConf = "manual";
+    if (HW.unified) HW.vram = HW.ram;
+    renderHardware(); renderModels();
+  }));
 }
 
 function benchHTML(m) {
@@ -702,7 +793,7 @@ function modelCardHTML(m) {
       ${cmds}
       <div class="foot">
         <span class="req">Needs <b>${fmtGB(need)}</b> · ${state.quant} · ${CTX_LABELS[CTX_STEPS.indexOf(state.ctx)]}</span>
-        <span class="speed-tag">${fit === "no" ? "" : icon("gauge",13) + " " + speedLabel(fit, active)}</span>
+        <span class="speed-tag">${speedHTML(m, fit, active)}</span>
       </div>
     </div>`;
 }
@@ -741,7 +832,7 @@ function renderSummary(evaluated) {
   else headline = `Largest runnable model: <span style="color:var(--blue)">${esc(best.m.name)}</span> (on the CPU)`;
 
   const hwTxt = HW.unified
-    ? `${fmtGB(HW.ram)} Unified Memory`
+    ? `${HW.chip ? "Apple " + HW.chip + " · " : ""}${fmtGB(HW.ram)} Unified Memory`
     : `${fmtGB(HW.ram)} RAM${HW.vram > 0 ? ` · ${fmtGB(HW.vram)} VRAM` : " · no dedicated GPU"}`;
 
   document.getElementById("summary").innerHTML = `
@@ -777,7 +868,9 @@ function renderStaticChrome() {
     <p><b>MoE models</b> (e.g. Qwen3-30B-A3B, gpt-oss, Mixtral) need memory for <i>all</i> experts but only compute with the <i>active</i> parameters — so they're much faster than their total size suggests.</p>
     <p><b>Benchmarks:</b> figures are indicative numbers from public model reports (instruct / reasoning variants, ~2026) — MMLU-Pro (general), GPQA-Diamond (hard reasoning) and SWE-bench Verified (coding). Open a model's card for the authoritative numbers, or compare live on <a href="https://llm-stats.com" target="_blank" rel="noopener">llm-stats.com</a> and <a href="https://lmarena.ai" target="_blank" rel="noopener">LMArena</a>.</p>
     <p><b>HuggingFace catalog:</b> parameter size is parsed from the model name (e.g. “…-8B-…”). Models with no detectable size are skipped. <code>ollama run hf.co/REPO:QUANT</code> pulls GGUF straight from HuggingFace; <code>lms get REPO</code> (or the in-app search) does the same in LM Studio.</p>
-    <p><b>Limits of browser detection:</b> <code>navigator.deviceMemory</code> is rounded and capped at 8 GB; VRAM is guessed from the GPU name. Correct the values manually if needed. Speed labels are rough heuristics.</p>
+    <p><b>Hardware detection:</b> on Apple Silicon the chip (e.g. “Apple M4”) is read from the GPU string and mapped to its P/E-core split, GPU cores, memory bandwidth and real RAM options — pick your config with the preset chips. On PCs the dedicated GPU is requested via WebGPU and matched against a VRAM/bandwidth table.</p>
+    <p><b>Speed (tok/s):</b> a rough decode-speed estimate = memory bandwidth ÷ active weights read per token. It's a ballpark, not a measured benchmark.</p>
+    <p><b>Limits:</b> browsers can't read RAM/VRAM exactly — <code>navigator.deviceMemory</code> is rounded (and often capped at 8 GB), VRAM is inferred from the GPU name. Correct any value manually if needed.</p>
     <p>To actually run models: <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> or <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">llama.cpp</a>.</p>`;
 
   document.getElementById("footer").innerHTML = `
