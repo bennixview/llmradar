@@ -4,7 +4,7 @@
 
 The hardware analysis runs **100 % client-side**. Only the optional model catalog is fetched from the public HuggingFace API.
 
-> Interface language is currently German. Inspired by [vely.ai](https://vely.ai), [caniusellm.com](https://www.caniusellm.com/) and similar tools.
+> Interface language is currently German.
 
 ---
 
