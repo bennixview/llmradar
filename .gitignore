@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Test / tooling artifacts
+.playwright-mcp/
+*.log
+
+# Dependencies (in case tooling is added later)
+node_modules/

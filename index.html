@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Welche KI-Modelle laufen auf deinem Rechner?</title>
+<meta name="description" content="Prüfe direkt im Browser, welche lokalen LLM-Modelle (Llama, Qwen, Gemma, Mistral …) dein Computer ausführen kann – mit Live-Katalog von HuggingFace und fertigen Befehlen für Ollama & LM Studio." />
+<style>
+  :root {
+    --bg: #0b0f17;
+    --bg-soft: #121826;
+    --card: #161e2e;
+    --card-2: #1b2436;
+    --border: #25304a;
+    --text: #e7edf6;
+    --muted: #93a1bd;
+    --faint: #64748b;
+    --accent: #4ade80;
+    --accent-2: #38bdf8;
+    --green: #4ade80;
+    --blue: #38bdf8;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --shadow: 0 12px 40px -12px rgba(0,0,0,.6);
+    --radius: 16px;
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(56,189,248,.10), transparent 60%),
+      radial-gradient(900px 500px at 10% 0%, rgba(74,222,128,.08), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* Hero */
+  header { padding: 64px 0 28px; text-align: center; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+    background: var(--card); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+  h1 {
+    font-size: clamp(28px, 5vw, 46px); line-height: 1.1; margin: 0 0 16px;
+    letter-spacing: -.02em; font-weight: 800;
+    background: linear-gradient(180deg, #fff, #b8c6e0);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { font-size: clamp(15px, 2.4vw, 19px); color: var(--muted); max-width: 640px; margin: 0 auto 32px; }
+
+  .cta {
+    appearance: none; border: 0; cursor: pointer;
+    font-size: 17px; font-weight: 700; color: #04140a;
+    background: linear-gradient(180deg, #6ee7a0, #34d27a);
+    padding: 16px 34px; border-radius: 14px;
+    box-shadow: 0 10px 30px -8px rgba(52,210,122,.6), inset 0 1px 0 rgba(255,255,255,.4);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 16px 36px -8px rgba(52,210,122,.7); }
+  .cta:active { transform: translateY(0); filter: brightness(.97); }
+  .cta:disabled { opacity: .7; cursor: progress; }
+  .privacy-note { margin-top: 16px; font-size: 13px; color: var(--faint); }
+
+  /* Sections */
+  section { margin: 32px 0; }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); margin: 0 0 14px; font-weight: 700; }
+
+  /* Hardware card */
+  .hw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .hw-cell {
+    background: linear-gradient(180deg, var(--card), var(--bg-soft));
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px; position: relative; box-shadow: var(--shadow);
+  }
+  .hw-cell .label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+  .hw-cell .icon { font-size: 16px; }
+  .hw-cell .value { font-size: 22px; font-weight: 700; margin-top: 8px; display: flex; align-items: baseline; gap: 6px; }
+  .hw-cell .value .unit { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .hw-cell .detail { font-size: 13px; color: var(--muted); margin-top: 4px; min-height: 18px; }
+  .hw-cell input[type=number], .hw-cell input[type=text] {
+    width: 90px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 20px; font-weight: 700;
+    font-family: inherit;
+  }
+  .hw-cell input:focus { outline: 2px solid var(--accent-2); border-color: transparent; }
+  .conf { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; position: absolute; top: 16px; right: 16px; }
+  .conf.measured { background: rgba(74,222,128,.14); color: var(--green); }
+  .conf.estimated { background: rgba(251,191,36,.14); color: var(--amber); }
+  .conf.manual { background: rgba(56,189,248,.14); color: var(--blue); }
+  .unified-tag { display:inline-block; margin-top:8px; font-size:12px; color:var(--accent-2); background:rgba(56,189,248,.1); border:1px solid rgba(56,189,248,.25); padding:2px 8px; border-radius:999px; }
+
+  .hint { font-size: 13px; color: var(--faint); margin-top: 12px; }
+  .hint b { color: var(--muted); }
+
+  /* Controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 18px 22px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .ctrl-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ctrl-group > label { font-size: 13px; color: var(--muted); }
+  select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 9px 12px; font-size: 14px; font-family: inherit; cursor: pointer;
+  }
+  select:focus { outline: 2px solid var(--accent-2); }
+  input[type=range] { accent-color: var(--accent); width: 150px; cursor: pointer; }
+  .ctxVal { color: var(--text); font-weight: 700; min-width: 34px; display: inline-block; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--muted); user-select: none; }
+  .switch input { display: none; }
+  .switch .track { width: 40px; height: 22px; background: var(--border); border-radius: 999px; position: relative; transition: background .2s; flex: 0 0 auto; }
+  .switch .track::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; background:#fff; border-radius:50%; transition: transform .2s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+
+  /* Segmented control */
+  .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .segmented button {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    font-family: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer; transition: .15s;
+  }
+  .segmented button:hover { color: var(--text); }
+  .segmented button.active { background: var(--card-2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.05); }
+
+  /* HF search bar */
+  .hfbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  .hfbar input[type=search] {
+    flex: 1 1 260px; min-width: 200px; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); border-radius: 10px; padding: 11px 14px; font-size: 14px; font-family: inherit;
+  }
+  .hfbar input[type=search]:focus { outline: 2px solid var(--accent-2); }
+  .hfbar .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--card-2); color: var(--text);
+    font-family: inherit; font-size: 14px; font-weight: 600; padding: 11px 16px; border-radius: 10px; cursor: pointer; transition: .15s;
+  }
+  .hfbar .btn:hover { border-color: var(--accent-2); }
+  .hfbar .btn.primary { background: linear-gradient(180deg,#5fd8f5,#38bdf8); color:#04222e; border-color: transparent; }
+  #hfStatus { font-size: 13px; color: var(--faint); flex-basis: 100%; }
+  #hfStatus a { color: var(--muted); }
+
+  /* Summary banner */
+  .summary { background: linear-gradient(180deg, var(--card-2), var(--card)); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); }
+  .summary h3 { margin: 0 0 6px; font-size: 18px; }
+  .summary p { margin: 0; color: var(--muted); font-size: 14px; }
+  .summary .pill-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .pill { font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid var(--border); display:flex; align-items:center; gap:6px; }
+  .pill b { font-weight:700; }
+
+  /* Model list */
+  .models { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .model {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
+    border-left: 4px solid var(--border); transition: transform .12s ease, border-color .2s;
+  }
+  .model:hover { transform: translateY(-2px); }
+  .model.gpu { border-left-color: var(--green); }
+  .model.cpu { border-left-color: var(--blue); }
+  .model.offload, .model.tight { border-left-color: var(--amber); }
+  .model.no { border-left-color: var(--red); opacity: .72; }
+  .model .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .model .name { font-weight: 700; font-size: 16px; word-break: break-word; }
+  .model .name a { color: inherit; text-decoration: none; }
+  .model .name a:hover { text-decoration: underline; }
+  .model .meta { font-size: 12px; color: var(--faint); margin-top: 2px; }
+  .model .cat { font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+  .status .sdot { width: 8px; height: 8px; border-radius: 50%; }
+  .status.gpu { color: var(--green); } .status.gpu .sdot { background: var(--green); }
+  .status.cpu { color: var(--blue); } .status.cpu .sdot { background: var(--blue); }
+  .status.offload, .status.tight { color: var(--amber); } .status.offload .sdot, .status.tight .sdot { background: var(--amber); }
+  .status.no { color: var(--red); } .status.no .sdot { background: var(--red); }
+  .model .foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 9px; }
+  .model .foot .req b { color: var(--text); }
+  .speed-tag { font-weight: 600; }
+
+  /* Command rows */
+  .cmds { display: flex; flex-direction: column; gap: 6px; }
+  .cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 7px 8px 7px 10px; }
+  .cmd .tool { font-size: 11px; font-weight: 700; color: var(--faint); width: 64px; flex: 0 0 auto; text-transform: uppercase; letter-spacing: .04em; }
+  .cmd code { flex: 1 1 auto; font-size: 12px; color: var(--text); overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  .cmd code::-webkit-scrollbar { display: none; }
+  .copybtn { appearance: none; border: 1px solid var(--border); background: var(--card-2); color: var(--muted); cursor: pointer; border-radius: 7px; padding: 4px 8px; font-size: 12px; flex: 0 0 auto; transition: .15s; }
+  .copybtn:hover { color: var(--text); border-color: var(--accent-2); }
+  .copybtn.done { color: var(--green); border-color: var(--green); }
+
+  .hidden { display: none !important; }
+  .placeholder { text-align: center; color: var(--faint); padding: 60px 20px; border: 1px dashed var(--border); border-radius: var(--radius); }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color: var(--accent-2); border-radius:50%; animation: spin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { margin: 56px 0 40px; color: var(--faint); font-size: 13px; text-align: center; line-height: 1.7; }
+  footer a { color: var(--muted); }
+  details.notes { margin-top: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 18px; }
+  details.notes summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--muted); }
+  details.notes p, details.notes li { font-size: 13px; color: var(--muted); }
+  details.notes code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="badge"><span class="dot"></span> Hardware-Analyse 100 % im Browser · keine Daten verlassen dein Gerät</div>
+    <h1>Welche KI-Modelle kann dein Rechner ausführen?</h1>
+    <p class="sub">Wir lesen kurz deine Hardware aus – Prozessor, Arbeitsspeicher und Grafikkarte – und zeigen dir, welche lokalen Sprachmodelle realistisch laufen. Inklusive Live-Katalog von HuggingFace und fertigen Befehlen für Ollama & LM Studio.</p>
+    <button class="cta" id="checkBtn">🔍 System jetzt prüfen</button>
+    <div class="privacy-note">Die Hardware-Analyse läuft komplett lokal. Nur der optionale Modellkatalog wird von huggingface.co geladen.</div>
+  </header>
+
+  <!-- Hardware results -->
+  <section id="hwSection" class="hidden">
+    <p class="section-title">Deine Hardware</p>
+    <div class="hw-grid" id="hwGrid"></div>
+    <p class="hint">💡 Browser können RAM und VRAM nicht exakt auslesen. Die <b>geschätzten</b> Werte kannst du oben einfach überschreiben – die Empfehlungen aktualisieren sich sofort.</p>
+  </section>
+
+  <!-- Controls -->
+  <section id="ctrlSection" class="hidden">
+    <div class="controls">
+      <div class="ctrl-group">
+        <label>Quelle:</label>
+        <div class="segmented" id="sourceTabs">
+          <button data-src="curated" class="active">Kuratiert</button>
+          <button data-src="hf">🤗 HuggingFace</button>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label for="quant">Quantisierung:</label>
+        <select id="quant"></select>
+      </div>
+      <div class="ctrl-group">
+        <label for="ctx">Kontext:</label>
+        <span class="ctxVal" id="ctxVal">8K</span>
+        <input type="range" id="ctx" min="0" max="6" step="1" value="2" />
+      </div>
+      <div class="ctrl-group">
+        <label class="switch">
+          <input type="checkbox" id="onlyFit" />
+          <span class="track"></span>
+          Nur lauffähige
+        </label>
+      </div>
+    </div>
+    <!-- HF search bar -->
+    <div class="hfbar hidden" id="hfBar">
+      <input type="search" id="hfSearch" placeholder="HuggingFace nach GGUF-Modellen durchsuchen … z. B. „qwen3", „llama 3.3", „phi-4"" />
+      <button class="btn primary" id="hfSearchBtn">Suchen</button>
+      <button class="btn" id="hfTopBtn">🔥 Top-Modelle</button>
+      <span id="hfStatus"></span>
+    </div>
+  </section>
+
+  <!-- Summary -->
+  <section id="summarySection" class="hidden">
+    <div class="summary" id="summary"></div>
+  </section>
+
+  <!-- Models -->
+  <section id="modelSection" class="hidden">
+    <p class="section-title">Modelle</p>
+    <div class="models" id="models"></div>
+  </section>
+
+  <section id="placeholderSection">
+    <div class="placeholder">Klicke auf <b>„System jetzt prüfen"</b>, um zu starten.</div>
+  </section>
+
+  <details class="notes">
+    <summary>So wird gerechnet & welche Grenzen es gibt</summary>
+    <p><b>Speicherbedarf:</b> Modellgröße ≈ Parameter × Bits pro Gewicht ÷ 8, plus KV-Cache (abhängig von der Kontextlänge) und etwas Laufzeit-Overhead. Ein 8B-Modell in Q4_K_M braucht bei 8K Kontext ≈ 6–7 GB, bei 32K spürbar mehr.</p>
+    <p><b>Kontextlänge:</b> Der KV-Cache wächst linear mit der Kontextlänge. Lange Kontexte (32K–128K) können mehr Speicher fressen als das Modell selbst – darum der Regler.</p>
+    <p><b>Wo läuft es?</b> Passt alles in den VRAM der Grafikkarte → schnell (GPU). Passt es nur in den RAM → läuft auf der CPU (langsamer). Apple-Silicon-Macs teilen sich RAM und GPU-Speicher (Unified Memory), daher zählt dort der gesamte Arbeitsspeicher.</p>
+    <p><b>MoE-Modelle</b> (z. B. Qwen3-30B-A3B, gpt-oss, Mixtral) brauchen Speicher für <i>alle</i> Experten, rechnen aber nur mit den aktiven Parametern – daher viel schneller als ihre Gesamtgröße vermuten lässt.</p>
+    <p><b>HuggingFace-Katalog:</b> Die Parametergröße wird aus dem Modellnamen gelesen (z. B. „…-8B-…"). Modelle ohne erkennbare Größe werden übersprungen. Befehl <code>ollama run hf.co/REPO:QUANT</code> lädt GGUF direkt von HuggingFace; <code>lms get REPO</code> bzw. die In-App-Suche tut dasselbe in LM Studio.</p>
+    <p><b>Grenzen der Browser-Erkennung:</b> <code>navigator.deviceMemory</code> ist bei 8 GB gedeckelt und gerundet; VRAM wird aus dem GPU-Namen geschätzt. Im Zweifel die Werte manuell korrigieren. Geschwindigkeitsangaben sind grobe Richtwerte.</p>
+    <p>Zum tatsächlichen Ausführen: <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> oder <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">llama.cpp</a>.</p>
+  </details>
+
+  <footer>
+    Schätzungen ohne Gewähr · Hardware-Analyse läuft offline in deinem Browser.<br>
+    Inspiriert von vely.ai, caniusellm.com & ähnlichen Tools · Modelldaten von HuggingFace.
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Quantisierungen (durchschnittl. Bits pro Gewicht) ---------- */
+const QUANTS = {
+  "Q4_K_M": { label: "Q4_K_M · empfohlen (gute Balance)", bpw: 4.85 },
+  "Q5_K_M": { label: "Q5_K_M · etwas höhere Qualität",     bpw: 5.70 },
+  "Q6_K":   { label: "Q6_K · nahe an voller Qualität",     bpw: 6.60 },
+  "Q8_0":   { label: "Q8_0 · sehr hohe Qualität",          bpw: 8.50 },
+  "FP16":   { label: "FP16 · volle Präzision (groß)",      bpw: 16.0 },
+};
+
+/* ---------- Kontextlängen ---------- */
+const CTX_STEPS  = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
+const CTX_LABELS = ["2K", "4K", "8K", "16K", "32K", "64K", "128K"];
+
+/* ---------- App-State ---------- */
+const state = {
+  quant: "Q4_K_M",
+  ctx: 8192,
+  onlyFit: false,
+  source: "curated",   // "curated" | "hf"
+  hfModels: [],
+  hfLoaded: false,
+};
+
+/* ---------- Kuratierter Modell-Katalog (Stand 2026) --------------------
+   params  = Gesamtparameter in Mrd. · active = aktive Params (MoE)
+   ollama  = Ollama-Library-Tag       · lms = LM-Studio-Suchname          */
+const CURATED = [
+  { name: "Qwen3 0.6B",             params: 0.6,  cat: "Winzig",                 ollama: "qwen3:0.6b",        lms: "qwen3-0.6b" },
+  { name: "Gemma 3 1B",             params: 1.0,  cat: "Winzig",                 ollama: "gemma3:1b",         lms: "gemma-3-1b" },
+  { name: "Llama 3.2 1B",           params: 1.24, cat: "Winzig",                 ollama: "llama3.2:1b",       lms: "llama-3.2-1b" },
+  { name: "Qwen3 1.7B",             params: 1.72, cat: "Klein",                  ollama: "qwen3:1.7b",        lms: "qwen3-1.7b" },
+  { name: "SmolLM2 1.7B",           params: 1.7,  cat: "Klein",                  ollama: "smollm2:1.7b",      lms: "smollm2-1.7b" },
+  { name: "Llama 3.2 3B",           params: 3.2,  cat: "Klein",                  ollama: "llama3.2:3b",       lms: "llama-3.2-3b" },
+  { name: "Phi-4-mini 3.8B",        params: 3.8,  cat: "Klein",                  ollama: "phi4-mini",         lms: "phi-4-mini" },
+  { name: "Qwen3 4B",               params: 4.0,  cat: "Klein",                  ollama: "qwen3:4b",          lms: "qwen3-4b" },
+  { name: "Gemma 3 4B",             params: 4.3,  cat: "Klein",                  ollama: "gemma3:4b",         lms: "gemma-3-4b" },
+  { name: "Mistral 7B",             params: 7.2,  cat: "Mittel",                 ollama: "mistral",           lms: "mistral-7b" },
+  { name: "DeepSeek-R1-Distill 7B", params: 7.0,  cat: "Mittel · Reasoning",     ollama: "deepseek-r1:7b",    lms: "deepseek-r1-distill-qwen-7b" },
+  { name: "Llama 3.1 8B",           params: 8.0,  cat: "Mittel",                 ollama: "llama3.1:8b",       lms: "llama-3.1-8b" },
+  { name: "Qwen3 8B",               params: 8.2,  cat: "Mittel",                 ollama: "qwen3:8b",          lms: "qwen3-8b" },
+  { name: "gpt-oss 20B",            params: 21.0, active: 3.6, cat: "MoE · schlank", ollama: "gpt-oss:20b",   lms: "gpt-oss-20b" },
+  { name: "Qwen3 30B-A3B",          params: 30.5, active: 3.3, cat: "MoE · schlank", ollama: "qwen3:30b-a3b", lms: "qwen3-30b-a3b" },
+  { name: "Gemma 3 12B",            params: 12.0, cat: "Mittel-groß",            ollama: "gemma3:12b",        lms: "gemma-3-12b" },
+  { name: "Mistral Nemo 12B",       params: 12.0, cat: "Mittel-groß",            ollama: "mistral-nemo",      lms: "mistral-nemo" },
+  { name: "Phi-4 14B",              params: 14.7, cat: "Mittel-groß",            ollama: "phi4",              lms: "phi-4" },
+  { name: "Qwen3 14B",              params: 14.8, cat: "Mittel-groß",            ollama: "qwen3:14b",         lms: "qwen3-14b" },
+  { name: "DeepSeek-R1-Distill 14B",params: 14.0, cat: "Mittel-groß · Reasoning",ollama: "deepseek-r1:14b",   lms: "deepseek-r1-distill-qwen-14b" },
+  { name: "Mistral Small 24B",      params: 23.6, cat: "Groß",                   ollama: "mistral-small",     lms: "mistral-small-24b" },
+  { name: "Gemma 3 27B",            params: 27.4, cat: "Groß",                   ollama: "gemma3:27b",        lms: "gemma-3-27b" },
+  { name: "Qwen3 32B",              params: 32.8, cat: "Groß",                   ollama: "qwen3:32b",         lms: "qwen3-32b" },
+  { name: "QwQ 32B",                params: 32.8, cat: "Groß · Reasoning",       ollama: "qwq",               lms: "qwq-32b" },
+  { name: "Mixtral 8x7B",           params: 46.7, active: 12.9, cat: "MoE",      ollama: "mixtral:8x7b",      lms: "mixtral-8x7b" },
+  { name: "Llama 3.3 70B",          params: 70.6, cat: "Sehr groß",             ollama: "llama3.3",          lms: "llama-3.3-70b" },
+  { name: "gpt-oss 120B",           params: 117,  active: 5.1,  cat: "MoE · groß",ollama: "gpt-oss:120b",     lms: "gpt-oss-120b" },
+  { name: "Qwen3 235B-A22B",        params: 235,  active: 22,   cat: "MoE · sehr groß", ollama: "qwen3:235b-a22b", lms: "qwen3-235b-a22b" },
+  { name: "DeepSeek-R1 671B",       params: 671,  active: 37,   cat: "MoE · Frontier",  ollama: "deepseek-r1:671b", lms: "deepseek-r1-671b" },
+];
+
+/* ---------- VRAM-Datenbank gängiger GPUs (GB) ---------- */
+const GPU_VRAM = [
+  [/rtx\s*5090/i,32],[/rtx\s*5080/i,16],[/rtx\s*5070\s*ti/i,16],[/rtx\s*5070/i,12],[/rtx\s*5060\s*ti/i,16],[/rtx\s*5060/i,8],
+  [/rtx\s*4090/i,24],[/rtx\s*4080/i,16],[/rtx\s*4070\s*ti/i,12],[/rtx\s*4070/i,12],[/rtx\s*4060\s*ti/i,8],[/rtx\s*4060/i,8],
+  [/rtx\s*3090/i,24],[/rtx\s*3080\s*ti/i,12],[/rtx\s*3080/i,10],[/rtx\s*3070/i,8],[/rtx\s*3060\s*ti/i,8],[/rtx\s*3060/i,12],[/rtx\s*3050/i,8],
+  [/rtx\s*2080\s*ti/i,11],[/rtx\s*2080/i,8],[/rtx\s*2070/i,8],[/rtx\s*2060/i,6],[/gtx\s*1080\s*ti/i,11],[/gtx\s*1070/i,8],[/gtx\s*1660/i,6],[/gtx\s*1060/i,6],
+  [/h100/i,80],[/a100/i,40],[/l40s?/i,48],[/a6000/i,48],[/a5000/i,24],[/a4000/i,16],[/\bt4\b/i,16],
+  [/(rx\s*)?7900\s*xtx/i,24],[/(rx\s*)?7900\s*xt/i,20],[/(rx\s*)?7800\s*xt/i,16],[/(rx\s*)?7700\s*xt/i,12],[/(rx\s*)?6900\s*xt/i,16],[/(rx\s*)?6800/i,16],[/(rx\s*)?6700\s*xt/i,12],
+  [/arc\s*a770/i,16],[/arc\s*b580/i,12],[/arc\s*a750/i,8],
+];
+
+/* ---------- Hardware-State ---------- */
+const HW = {
+  cores: null, ram: null, ramConf: "estimated",
+  vram: null, vramConf: "estimated", unified: false,
+  gpuName: "Unbekannt", platform: "",
+};
+
+/* ---------- Hardware-Erkennung ---------- */
+async function detectHardware() {
+  HW.cores = navigator.hardwareConcurrency || null;
+  HW.platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+
+  let renderer = "";
+  try {
+    const c = document.createElement("canvas");
+    const gl = c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl");
+    if (gl) {
+      const ext = gl.getExtension("WEBGL_debug_renderer_info");
+      if (ext) renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "";
+      if (!renderer) renderer = gl.getParameter(gl.RENDERER) || "";
+    }
+  } catch (e) {}
+
+  try {
+    if (navigator.gpu) {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        let info = adapter.info;
+        if (!info && adapter.requestAdapterInfo) { try { info = await adapter.requestAdapterInfo(); } catch (e) {} }
+        if (info) {
+          const desc = info.description || info.device || info.architecture || "";
+          if (desc && (!renderer || renderer.length < 4)) renderer = desc;
+        }
+      }
+    }
+  } catch (e) {}
+
+  renderer = (renderer || "").trim();
+  HW.gpuName = renderer || "Nicht ermittelbar";
+
+  const lower = renderer.toLowerCase();
+  const isApple = /apple/.test(lower);
+  const isIntegrated = /(intel|iris|uhd|hd graphics|radeon graphics|adreno|mali|integrated)/.test(lower) && !/(rx|arc|radeon pro)/.test(lower);
+  const dm = navigator.deviceMemory || null;
+
+  if (isApple) {
+    HW.unified = true;
+    HW.ram = dm && dm < 8 ? dm : 16;   // deviceMemory ist bei Macs meist gedeckelt → konservativ 16
+    HW.ramConf = "estimated";
+    HW.vram = HW.ram; HW.vramConf = "estimated";
+  } else {
+    HW.ram = dm || 8;
+    HW.ramConf = dm ? (dm >= 8 ? "estimated" : "measured") : "estimated";
+    let v = 0, found = false;
+    for (const [re, gb] of GPU_VRAM) { if (re.test(lower)) { v = gb; found = true; break; } }
+    if (found) { HW.vram = v; HW.vramConf = "estimated"; }
+    else if (isIntegrated) { HW.vram = 0; HW.vramConf = "estimated"; if (renderer) HW.gpuName = renderer + " (integriert)"; }
+    else { HW.vram = 0; HW.vramConf = "estimated"; }
+  }
+}
+
+/* ---------- Speicherbedarf inkl. KV-Cache ---------- */
+function kvCacheGB(model, ctxTokens) {
+  // KV-Cache skaliert mit Layer×KV-Dim (≈ params^0.42) und linear mit Kontext, fp16
+  const p = model.active ? Math.min(model.params, model.active * 3) : model.params;
+  return 5.5e-5 * Math.pow(p, 0.42) * ctxTokens;
+}
+function requiredGB(model, quantKey, ctxTokens) {
+  const modelGB = model.params * QUANTS[quantKey].bpw / 8;
+  const kv = kvCacheGB(model, ctxTokens);
+  const runtime = modelGB * 0.06 + 0.5;
+  return modelGB + kv + runtime;
+}
+
+function evaluate(model) {
+  const need = requiredGB(model, state.quant, state.ctx);
+  const active = model.active || model.params;
+  let fit;
+  if (HW.unified) {
+    const usable = HW.ram * 0.72;
+    if (need <= usable) fit = "gpu";
+    else if (need <= HW.ram * 0.9) fit = "tight";
+    else fit = "no";
+  } else {
+    const vramUsable = HW.vram * 0.9;
+    const ramUsable = HW.ram * 0.7;
+    if (HW.vram > 0 && need <= vramUsable) fit = "gpu";
+    else if (HW.vram >= 2 && need <= vramUsable + ramUsable) fit = "offload";
+    else if (need <= ramUsable) fit = "cpu";
+    else fit = "no";
+  }
+  return { need, fit, active };
+}
+
+function statusLabel(fit) {
+  switch (fit) {
+    case "gpu":     return HW.unified ? "Läuft auf der GPU (Metal)" : "Läuft flüssig auf der GPU";
+    case "cpu":     return "Läuft auf der CPU";
+    case "offload": return "GPU + RAM (Offload)";
+    case "tight":   return "Knapp – evtl. machbar";
+    default:        return "Zu groß für dieses System";
+  }
+}
+function speedLabel(fit, active) {
+  if (fit === "gpu")     return active <= 9 ? "schnell" : active <= 32 ? "brauchbar" : "eher zäh";
+  if (fit === "cpu")     return active <= 3 ? "brauchbar" : active <= 8 ? "langsam" : "sehr langsam";
+  if (fit === "offload") return "langsam";
+  if (fit === "tight")   return "grenzwertig";
+  return "—";
+}
+
+/* ---------- Befehle ---------- */
+function commandsFor(m) {
+  const q = state.quant, ql = q.toLowerCase();
+  if (m.hf) {
+    return {
+      ollama: `ollama run hf.co/${m.hf}:${q}`,
+      lms:    `lms get ${m.hf}`,
+    };
+  }
+  return {
+    ollama: `ollama run ${m.ollama}`,
+    lms:    `lms get ${m.lms}@${ql}`,
+  };
+}
+
+/* ---------- Utils ---------- */
+function fmtGB(x) { return (x < 10 ? x.toFixed(1) : Math.round(x)) + " GB"; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmtDownloads(n) { if (!n) return ""; if (n >= 1e6) return (n/1e6).toFixed(1)+"M"; if (n >= 1e3) return Math.round(n/1e3)+"k"; return ""+n; }
+
+function copyText(t) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+  return new Promise((res, rej) => {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand("copy"); res(); } catch (e) { rej(e); } finally { document.body.removeChild(ta); }
+  });
+}
+
+/* ---------- HuggingFace-Katalog ---------- */
+const HF_SKIP = /(whisper|embed|rerank|reranker|bge-|gte-|clip|tts|vits|sdxl|flux|stable-diffusion|moderation|guard|vl\b)/i;
+
+function parseHFModel(item) {
+  const id = item.id || item.modelId;
+  if (!id) return null;
+  if (HF_SKIP.test(id)) return null;
+  const short = id.split("/").pop();
+
+  // MoE „A3B" (aktive Parameter) zusammen mit Gesamtgröße „30B"
+  const actMatch = short.match(/[-_]a(\d+(?:\.\d+)?)b\b/i);
+  // MoE „8x7B"
+  const moeMatch = short.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)b\b/i);
+  // Dichte Größe „8B", „0.5B", „70B" (nicht Teil von AxB)
+  const denseMatches = [...short.matchAll(/(?:^|[-_\s.])(\d+(?:\.\d+)?)\s*b\b/gi)]
+    .map(m => parseFloat(m[1]))
+    .filter(v => v >= 0.1 && v <= 2000);
+
+  let params = null, active = null;
+  if (moeMatch) {
+    const n = parseInt(moeMatch[1], 10), sz = parseFloat(moeMatch[2]);
+    params = +(n * sz * 0.86).toFixed(1);   // geteilte Attention → ~14% weniger als n×sz
+    active = +(sz * 2).toFixed(1);           // typ. Top-2-Routing
+  } else if (denseMatches.length) {
+    params = Math.max(...denseMatches);
+    if (actMatch) active = parseFloat(actMatch[1]);
+  }
+  if (!params) return null;
+
+  return {
+    name: short.replace(/[-_]?gguf$/i, ""),
+    params, active: active || undefined,
+    cat: active ? "MoE · HF" : "HuggingFace",
+    hf: id,
+    url: "https://huggingface.co/" + id,
+    downloads: item.downloads, likes: item.likes,
+  };
+}
+
+async function fetchHF(query) {
+  const status = document.getElementById("hfStatus");
+  status.innerHTML = '<span class="spinner"></span> Lade Modelle von huggingface.co …';
+  const params = new URLSearchParams({ filter: "gguf", sort: "downloads", direction: "-1", limit: "60" });
+  if (query) params.set("search", query);
+  let data;
+  try {
+    const r = await fetch("https://huggingface.co/api/models?" + params.toString());
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    data = await r.json();
+  } catch (e) {
+    status.innerHTML = '⚠️ Konnte HuggingFace nicht erreichen (' + esc(e.message) + '). Internet/Adblocker prüfen oder „Kuratiert" nutzen.';
+    return;
+  }
+  const seen = new Set();
+  const parsed = [];
+  for (const item of data) {
+    const m = parseHFModel(item);
+    if (!m) continue;
+    const key = m.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parsed.push(m);
+    if (parsed.length >= 30) break;
+  }
+  state.hfModels = parsed;
+  state.hfLoaded = true;
+  const skipped = data.length - parsed.length;
+  status.innerHTML = `✅ ${parsed.length} Modelle mit erkennbarer Größe geladen` +
+    (skipped > 0 ? ` · ${skipped} ohne erkennbare Größe übersprungen` : "") +
+    ` · Quelle: <a href="https://huggingface.co/models?library=gguf" target="_blank" rel="noopener">huggingface.co</a>`;
+  renderModels();
+}
+
+/* ---------- Rendering ---------- */
+function renderHardware() {
+  const grid = document.getElementById("hwGrid");
+  const confTxt = { measured: "gemessen", estimated: "geschätzt", manual: "manuell" };
+  grid.innerHTML = `
+    <div class="hw-cell">
+      <div class="conf measured">gemessen</div>
+      <div class="label"><span class="icon">🧠</span> Prozessor</div>
+      <div class="value">${HW.cores || "?"}<span class="unit">Threads</span></div>
+      <div class="detail">${esc(HW.platform || "")}</div>
+    </div>
+    <div class="hw-cell">
+      <div class="conf ${HW.ramConf}">${confTxt[HW.ramConf]}</div>
+      <div class="label"><span class="icon">💾</span> Arbeitsspeicher (RAM)</div>
+      <div class="value"><input type="number" id="ramInput" min="1" max="2048" step="1" value="${HW.ram}"><span class="unit">GB</span></div>
+      <div class="detail">editierbar – trag deinen echten RAM ein</div>
+    </div>
+    <div class="hw-cell">
+      <div class="conf ${HW.vramConf}">${confTxt[HW.vramConf]}</div>
+      <div class="label"><span class="icon">🎮</span> Grafikspeicher (VRAM)</div>
+      <div class="value"><input type="number" id="vramInput" min="0" max="200" step="1" value="${HW.vram}"><span class="unit">GB</span></div>
+      <div class="detail">${HW.unified ? '<span class="unified-tag">Unified Memory</span>' : "0 = keine dedizierte GPU"}</div>
+    </div>
+    <div class="hw-cell">
+      <div class="conf estimated">erkannt</div>
+      <div class="label"><span class="icon">🖥️</span> Grafikkarte</div>
+      <div class="value" style="font-size:15px;line-height:1.3;">${esc(HW.gpuName)}</div>
+      <div class="detail">
+        <label class="switch" style="font-size:12px;margin-top:4px;">
+          <input type="checkbox" id="unifiedToggle" ${HW.unified ? "checked" : ""}>
+          <span class="track"></span> Unified Memory (Apple/iGPU)
+        </label>
+      </div>
+    </div>`;
+
+  document.getElementById("ramInput").addEventListener("input", e => {
+    HW.ram = Math.max(1, parseFloat(e.target.value) || 1); HW.ramConf = "manual";
+    if (HW.unified) { HW.vram = HW.ram; document.getElementById("vramInput").value = HW.ram; }
+    renderModels();
+  });
+  document.getElementById("vramInput").addEventListener("input", e => {
+    HW.vram = Math.max(0, parseFloat(e.target.value) || 0); HW.vramConf = "manual"; renderModels();
+  });
+  document.getElementById("unifiedToggle").addEventListener("change", e => {
+    HW.unified = e.target.checked;
+    if (HW.unified) { HW.vram = HW.ram; }
+    renderHardware(); renderModels();
+  });
+}
+
+function modelCardHTML(m) {
+  const { need, fit, active } = evaluate(m);
+  const isMoE = !!m.active;
+  const nameHTML = m.url
+    ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.name)}</a>`
+    : esc(m.name);
+  const dl = m.downloads ? ` · ⬇ ${fmtDownloads(m.downloads)}` : "";
+
+  let cmds = "";
+  if (fit !== "no") {
+    const c = commandsFor(m);
+    cmds = `
+      <div class="cmds">
+        <div class="cmd"><span class="tool">Ollama</span><code>${esc(c.ollama)}</code><button class="copybtn" data-cmd="${esc(c.ollama)}" title="Kopieren">📋</button></div>
+        <div class="cmd"><span class="tool">LM Studio</span><code>${esc(c.lms)}</code><button class="copybtn" data-cmd="${esc(c.lms)}" title="Kopieren">📋</button></div>
+      </div>`;
+  }
+
+  return `
+    <div class="model ${fit}">
+      <div class="top">
+        <div>
+          <div class="name">${nameHTML}</div>
+          <div class="meta">${m.params}B Parameter${isMoE ? ` · ${m.active}B aktiv` : ""}${dl}</div>
+        </div>
+        <div class="cat">${esc(m.cat)}</div>
+      </div>
+      <div class="status ${fit}"><span class="sdot"></span>${statusLabel(fit)}</div>
+      ${cmds}
+      <div class="foot">
+        <span class="req">Bedarf: <b>${fmtGB(need)}</b> (${state.quant}, ${CTX_LABELS[CTX_STEPS.indexOf(state.ctx)]})</span>
+        <span class="speed-tag">${fit === "no" ? "" : "≈ " + speedLabel(fit, active)}</span>
+      </div>
+    </div>`;
+}
+
+function renderModels() {
+  const baseList = state.source === "hf" ? state.hfModels : CURATED;
+  const evaluated = baseList.map(m => ({ m, ...evaluate(m) })).sort((a, b) => a.m.params - b.m.params);
+  const container = document.getElementById("models");
+
+  if (state.source === "hf" && !state.hfLoaded) {
+    container.innerHTML = `<div class="placeholder" style="grid-column:1/-1">Suche oben nach Modellen oder lade die <b>🔥 Top-Modelle</b>.</div>`;
+  } else if (!evaluated.length) {
+    container.innerHTML = `<div class="placeholder" style="grid-column:1/-1">Keine Modelle gefunden. Versuch einen anderen Suchbegriff.</div>`;
+  } else {
+    const visible = evaluated.filter(x => !state.onlyFit || x.fit !== "no");
+    container.innerHTML = visible.length
+      ? visible.map(x => modelCardHTML(x.m)).join("")
+      : `<div class="placeholder" style="grid-column:1/-1">Mit diesen Einstellungen läuft keines der Modelle. Schalte „Nur lauffähige" aus oder erhöhe RAM/VRAM.</div>`;
+  }
+
+  renderSummary(evaluated);
+}
+
+function renderSummary(evaluated) {
+  const counts = { gpu: 0, cpu: 0, offload: 0, tight: 0, no: 0 };
+  evaluated.forEach(x => counts[x.fit]++);
+  const runnable = evaluated.filter(x => x.fit !== "no");
+  const best = runnable.length ? runnable[runnable.length - 1] : null;
+  const gpuBest = evaluated.filter(x => x.fit === "gpu");
+  const topGpu = gpuBest.length ? gpuBest[gpuBest.length - 1] : null;
+  const ctxLabel = CTX_LABELS[CTX_STEPS.indexOf(state.ctx)];
+
+  let headline;
+  if (!evaluated.length) headline = "Noch keine Modelle geladen.";
+  else if (!runnable.length) headline = "Mit diesen Einstellungen ist dieses System leider zu knapp.";
+  else if (topGpu) headline = `Dein größtes flüssiges Modell: <span style="color:var(--green)">${esc(topGpu.m.name)}</span>`;
+  else headline = `Größtes lauffähiges Modell: <span style="color:var(--blue)">${esc(best.m.name)}</span> (auf der CPU)`;
+
+  const hwTxt = HW.unified
+    ? `${fmtGB(HW.ram)} Unified Memory`
+    : `${fmtGB(HW.ram)} RAM${HW.vram > 0 ? ` · ${fmtGB(HW.vram)} VRAM` : " · keine dedizierte GPU"}`;
+
+  document.getElementById("summary").innerHTML = `
+    <h3>${headline}</h3>
+    <p>${state.source === "hf" ? "HuggingFace-Katalog" : "Kuratierter Katalog"} · <b>${state.quant}</b> · <b>${ctxLabel}</b> Kontext · ${hwTxt}.</p>
+    <div class="pill-row">
+      <span class="pill" style="color:var(--green)">🟢 <b>${counts.gpu}</b> auf GPU</span>
+      <span class="pill" style="color:var(--blue)">🔵 <b>${counts.cpu}</b> auf CPU</span>
+      <span class="pill" style="color:var(--amber)">🟡 <b>${counts.offload + counts.tight}</b> grenzwertig</span>
+      <span class="pill" style="color:var(--red)">🔴 <b>${counts.no}</b> zu groß</span>
+    </div>`;
+}
+
+/* ---------- Steuerelemente verkabeln ---------- */
+function initControls() {
+  const sel = document.getElementById("quant");
+  sel.innerHTML = Object.entries(QUANTS).map(([k, v]) => `<option value="${k}" ${k === state.quant ? "selected" : ""}>${v.label}</option>`).join("");
+  sel.addEventListener("change", e => { state.quant = e.target.value; renderModels(); });
+
+  const ctx = document.getElementById("ctx");
+  ctx.addEventListener("input", e => {
+    const idx = parseInt(e.target.value, 10);
+    state.ctx = CTX_STEPS[idx];
+    document.getElementById("ctxVal").textContent = CTX_LABELS[idx];
+    renderModels();
+  });
+
+  document.getElementById("onlyFit").addEventListener("change", e => { state.onlyFit = e.target.checked; renderModels(); });
+
+  // Quelle wechseln
+  document.querySelectorAll("#sourceTabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#sourceTabs button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.source = btn.dataset.src;
+      document.getElementById("hfBar").classList.toggle("hidden", state.source !== "hf");
+      if (state.source === "hf" && !state.hfLoaded) fetchHF("");   // beim ersten Öffnen Top-Modelle laden
+      else renderModels();
+    });
+  });
+
+  document.getElementById("hfSearchBtn").addEventListener("click", () => fetchHF(document.getElementById("hfSearch").value.trim()));
+  document.getElementById("hfSearch").addEventListener("keydown", e => { if (e.key === "Enter") fetchHF(e.target.value.trim()); });
+  document.getElementById("hfTopBtn").addEventListener("click", () => { document.getElementById("hfSearch").value = ""; fetchHF(""); });
+
+  // Copy-Buttons (Event-Delegation)
+  document.getElementById("models").addEventListener("click", e => {
+    const btn = e.target.closest(".copybtn");
+    if (!btn) return;
+    copyText(btn.dataset.cmd).then(() => {
+      const old = btn.textContent;
+      btn.textContent = "✓"; btn.classList.add("done");
+      setTimeout(() => { btn.textContent = old; btn.classList.remove("done"); }, 1200);
+    });
+  });
+}
+
+/* ---------- Start ---------- */
+let initialized = false;
+document.getElementById("checkBtn").addEventListener("click", async function () {
+  const btn = this;
+  btn.disabled = true; btn.textContent = "⏳ Hardware wird analysiert …";
+  await new Promise(r => setTimeout(r, 600));
+  await detectHardware();
+
+  document.getElementById("placeholderSection").classList.add("hidden");
+  ["hwSection", "ctrlSection", "summarySection", "modelSection"].forEach(id => document.getElementById(id).classList.remove("hidden"));
+
+  if (!initialized) { initControls(); initialized = true; }
+  renderHardware();
+  renderModels();
+
+  btn.disabled = false; btn.textContent = "🔄 Erneut prüfen";
+  document.getElementById("hwSection").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+</script>
+</body>
+</html>
