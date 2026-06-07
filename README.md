@@ -2,9 +2,9 @@
 
 **Scan your machine right in the browser and see which local LLMs it can actually run** — Llama, Qwen, Gemma, Mistral, gpt-oss & co. No install, no upload, no backend.
 
-The hardware analysis runs **100 % client-side**. Only the optional model catalog is fetched from the public HuggingFace API.
+The hardware analysis runs **100 % client-side**. Only the optional model catalog and benchmark links use the public HuggingFace API.
 
-> Interface language is currently German.
+**▶ Live:** https://bennixview.github.io/llmradar/
 
 ---
 
@@ -20,7 +20,18 @@ The hardware analysis runs **100 % client-side**. Only the optional model catalo
 - 📋 **Ready-to-run commands** — copy-to-clipboard for both **Ollama** and **LM Studio** per model:
   - Curated: `ollama run qwen3:14b` · `lms get qwen3-14b@q4_k_m`
   - HuggingFace: `ollama run hf.co/REPO:Q4_K_M` · `lms get REPO`
+- 📊 **Benchmarks at a glance** — MMLU-Pro, GPQA-Diamond and SWE-bench Verified bars per curated model (indicative figures from public reports), with a one-click link to each model's HuggingFace card for the authoritative numbers.
 - 🟢🔵🟡🔴 **Clear verdict per model** — runs on GPU / runs on CPU / borderline / too big, plus a rough speed hint.
+- 🌗 **Dark & light theme** — dark by default, toggleable, preference persisted in `localStorage`.
+
+## Fonts, icons & privacy
+
+No third-party assets are loaded at runtime — so there's **no Google-Fonts-style GDPR exposure** (no visitor IP leaks to a CDN):
+
+- **Inter** typeface is **self-hosted** (`assets/fonts/`) under the [SIL Open Font License 1.1](assets/fonts/OFL.txt).
+- **Lucide** icons (ISC license) are inlined as SVG in the page — no icon-font request.
+
+The only outbound request is the optional HuggingFace model catalog/benchmark links, and only when you open that tab.
 
 ## How it works
 
