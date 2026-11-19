@@ -64,10 +64,24 @@ function applyAppleSpec(h) {
   // Safari caps hardwareConcurrency at 8, so core counts only pick the bin when the chip was actually detected
   const sp = appleSpec(h.chip, h.chipHidden ? null : h.cores, h.ram);
   h.ramOptions = sp.ram; h.tiers = sp.tiers; h.gpuCores = sp.gpu; h.bandwidth = sp.bw;
+  if (h.chipHidden) h.cores = h.tiers ? (h.tiers.s || 0) + (h.tiers.p || 0) + (h.tiers.e || 0) : null;   // picked chip → its real core count
+}
+/* Safari / Firefox hide the chip and RAM: remember what the user picked so they only pick once */
+const APPLE_PICK_KEY = "llmradar-apple";
+function saveApplePick() {
+  if (!HW.apple || !HW.chipHidden || !HW.chip) return;
+  try { localStorage.setItem(APPLE_PICK_KEY, JSON.stringify({ chip: HW.chip, ram: HW.ram })); } catch (e) {}
+}
+function loadApplePick() {
+  try {
+    const p = JSON.parse(localStorage.getItem(APPLE_PICK_KEY) || "null");
+    if (p && typeof p.chip === "string" && has(APPLE_CHIPS, p.chip)) return { chip: p.chip, ram: num(p.ram, 0) };
+  } catch (e) {}
+  return null;
 }
 
 const HW_DEFAULTS = {
-  cores: null, ram: null, ramConf: "estimated", vram: null, vramConf: "estimated",
+  cores: null, cpuConf: "measured", ram: null, ramConf: "estimated", vram: null, vramConf: "estimated",
   unified: false, gpuName: "Unknown", gpuApprox: false, platform: "",
   apple: false, chip: null, chipHidden: false, socName: null, tiers: null,
   gpuCores: null, bandwidth: null, gpuBandwidth: null, ramOptions: null,
@@ -105,6 +119,7 @@ async function detectHardware() {
   hw.cores = hc > 0 ? Math.round(hc) : null;
   // userAgentData.platform is more accurate than navigator.platform (which says "MacIntel" on Apple Silicon)
   hw.platform = String((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "");
+  if (/^mac/i.test(hw.platform)) hw.platform = "macOS";
 
   let renderer = "";
   try {
@@ -161,11 +176,15 @@ async function detectHardware() {
     hw.unified = true; hw.apple = true;
     hw.chip = parseAppleChip(renderer);
     hw.chipHidden = !hw.chip;
+    // Safari caps hardwareConcurrency at 8 and hides chip + RAM: no real core count until a chip is picked
+    const pick = hw.chipHidden ? loadApplePick() : null;
+    if (hw.chipHidden) { hw.chip = pick && pick.chip; hw.cpuConf = hw.chip ? "manual" : "estimated"; }
     hw.gpuName = hw.chip ? "Apple " + hw.chip : "Apple Silicon (chip hidden by the browser)";
     applyAppleSpec(hw);
-    // RAM is not readable; pick the chip's lowest config, but trust deviceMemory if it matches an option
+    // RAM is not readable; reuse the last pick, else the chip's lowest config, but trust deviceMemory if it matches an option
     const known = hw.chip && has(APPLE_CHIPS, hw.chip);
-    hw.ram = dm && hw.ramOptions.includes(dm) ? dm : known ? hw.ramOptions[0] : 16;
+    if (pick && hw.ramOptions.includes(pick.ram)) { hw.ram = pick.ram; hw.ramConf = "manual"; }
+    else hw.ram = dm && hw.ramOptions.includes(dm) ? dm : known ? hw.ramOptions[0] : 16;
     applyAppleSpec(hw);
     hw.vram = hw.ram; hw.vramSaved = 0;   // no dedicated VRAM behind Apple's unified memory
   } else if (soc) {
@@ -362,7 +381,9 @@ function renderHardware() {
 
   const t = HW.tiers;
   const tierTxt = t ? [t.s && `${esc(t.s)}S`, t.p && `${esc(t.p)}P`, t.e && `${esc(t.e)}E`].filter(Boolean).join(" + ") + " cores · " : "";
-  const cpuDetail = `<span title="S = super · P = performance · E = efficiency cores">${tierTxt}</span>${esc(HW.platform)}`;
+  const cpuDetail = HW.apple && HW.chipHidden && !HW.chip
+    ? `${esc(HW.platform)} · hidden by the browser — pick your chip`
+    : `<span title="S = super · P = performance · E = efficiency cores">${tierTxt}</span>${esc(HW.platform)}`;
   const ramPresets = (HW.unified && HW.ramOptions)
     ? `<div class="ram-presets" role="group" aria-label="RAM presets">${HW.ramOptions.map(o => `<button type="button" class="ram-chip${o === HW.ram ? " active" : ""}" data-ram="${esc(o)}" aria-pressed="${o === HW.ram}">${esc(o)}</button>`).join("")}<span class="ram-presets-hint">GB — pick yours</span></div>`
     : `<div class="detail">editable — enter your real RAM</div>`;
@@ -371,12 +392,13 @@ function renderHardware() {
   const chipSelect = HW.apple
     ? `<div class="detail"><select id="chipSelect" class="chip-select" aria-label="Apple chip">${HW.chip ? "" : `<option value="">Pick your chip …</option>`}${chipKeys.map(k => `<option value="${esc(k)}"${k === HW.chip ? " selected" : ""}>Apple ${esc(k)}</option>`).join("")}</select></div>`
     : "";
+  const gpuConf = HW.chipHidden ? (HW.chip ? ["manual", "picked"] : ["estimated", "hidden"]) : ["estimated", "detected"];
   const approx = HW.gpuApprox ? `<div class="detail">Browser reports an approximate GPU — check VRAM</div>` : "";
   const dgpu = HW.dgpuHint && !HW.unified ? `<div class="detail">discrete GPU detected — enter its VRAM</div>` : "";
 
   grid.innerHTML = `
     <div class="hw-cell">
-      <div class="conf measured">measured</div>
+      <div class="conf ${HW.cpuConf}">${confTxt[HW.cpuConf]}</div>
       <div class="label">${icon("cpu",15)} Processor</div>
       <div class="value">${esc(HW.cores || "?")}<span class="unit">cores</span></div>
       <div class="detail">${cpuDetail}</div>
@@ -394,7 +416,7 @@ function renderHardware() {
       <div class="detail">${HW.unified ? `<span class="unified-tag">${icon("layers",13)} shared with RAM</span>` : "0 = no dedicated GPU"}</div>
     </div>
     <div class="hw-cell">
-      <div class="conf estimated">detected</div>
+      <div class="conf ${gpuConf[0]}">${gpuConf[1]}</div>
       <div class="label">${icon("monitor",15)} Graphics card</div>
       <div class="value" style="font-size:14.5px;line-height:1.3;font-weight:650;">${esc(HW.gpuName)}</div>
       <div class="detail spec-line" id="gpuSpec">${gpuSpecHTML()}</div>
@@ -410,7 +432,7 @@ function renderHardware() {
   document.getElementById("ramInput").addEventListener("input", e => {
     HW.ram = Math.min(2048, Math.max(1, parseFloat(e.target.value) || 1)); HW.ramConf = "manual";
     if (HW.unified) { HW.vram = HW.ram; document.getElementById("vramInput").value = HW.ram; }
-    if (HW.apple) { applyAppleSpec(); document.getElementById("gpuSpec").innerHTML = gpuSpecHTML(); }   // RAM can decide the GPU variant
+    if (HW.apple) { applyAppleSpec(); saveApplePick(); document.getElementById("gpuSpec").innerHTML = gpuSpecHTML(); }   // RAM can decide the GPU variant
     document.querySelectorAll(".ram-chip").forEach(c => { const on = +c.dataset.ram === HW.ram; c.classList.toggle("active", on); c.setAttribute("aria-pressed", on); });
     renderModels();
   });
@@ -427,9 +449,10 @@ function renderHardware() {
   if (chipSel) chipSel.addEventListener("change", e => {
     const k = e.target.value; if (!k || !chipKeys.includes(k)) return;
     HW.chip = k; HW.gpuName = "Apple " + k;
+    if (HW.chipHidden) HW.cpuConf = "manual";
     applyAppleSpec();
     if (!HW.ramOptions.includes(HW.ram)) HW.ram = HW.ramOptions[0];
-    applyAppleSpec();
+    applyAppleSpec(); saveApplePick();
     if (HW.unified) HW.vram = HW.ram;
     renderHardware(); renderModels();
     const again = document.getElementById("chipSelect"); if (again) again.focus();   // keep keyboard focus after re-render
@@ -437,7 +460,7 @@ function renderHardware() {
   document.querySelectorAll(".ram-chip").forEach(chip => chip.addEventListener("click", () => {
     HW.ram = +chip.dataset.ram; HW.ramConf = "manual";
     if (HW.unified) HW.vram = HW.ram;
-    if (HW.apple) applyAppleSpec();
+    if (HW.apple) { applyAppleSpec(); saveApplePick(); }
     renderHardware(); renderModels();
     const again = document.querySelector(`.ram-chip[data-ram="${HW.ram}"]`); if (again) again.focus();   // keep keyboard focus after re-render
   }));
@@ -592,7 +615,7 @@ function renderStaticChrome() {
     <p><b>Benchmarks:</b> values come from each model's own card or tech report (mostly thinking / high-effort modes) — MMLU-Pro (general), GPQA-Diamond (hard reasoning) and SWE-bench Verified (coding). Missing bars mean the source doesn't state that figure. Open a model's card for details, or compare live on <a href="https://llm-stats.com" target="_blank" rel="noopener noreferrer">llm-stats.com</a> and <a href="https://lmarena.ai" target="_blank" rel="noopener noreferrer">LMArena</a>.</p>
     <p><b>HuggingFace catalog:</b> parameter size is parsed from the model name (e.g. “…-8B-…”). Models with no detectable size are skipped. <code>ollama run hf.co/REPO:QUANT</code> pulls GGUF straight from HuggingFace; <code>lms get https://huggingface.co/REPO@QUANT</code> (or the in-app search) does the same in LM Studio.</p>
     <p><b>Commands (curated):</b> <code>ollama run TAG</code> pulls Ollama's default build of the model (often Q4_K_M, some are NVFP4 or MLX) whatever quantization is selected here. The LM Studio key points to the lmstudio-community GGUF, which usually ships only Q4_K_M, Q6_K, Q8_0 and BF16 — other <code>@quant</code> values may not exist. Models without a package on either tool link to their GGUFs via the model card.</p>
-    <p><b>Hardware detection:</b> on Apple Silicon (M1 – M6, A18 Pro) Chromium browsers expose the chip (e.g. “Apple M5 Pro”), which is mapped to its core split (S = super, P = performance, E = efficiency), GPU cores, memory bandwidth and real RAM options. Safari and Firefox hide the chip — pick it from the list. Where two variants share a core count (e.g. M5 Max 32- vs 40-core GPU) your RAM choice decides. Unified-memory PCs (AMD Ryzen AI Max / Strix Halo, NVIDIA DGX Spark, Snapdragon X, Intel Lunar / Panther Lake) are recognised too. Dedicated GPUs — incl. laptop variants, which often have less VRAM than the desktop card of the same name — are matched against a VRAM/bandwidth table.</p>
+    <p><b>Hardware detection:</b> on Apple Silicon (M1 – M6, A18 Pro) Chromium browsers expose the chip (e.g. “Apple M5 Pro”), which is mapped to its core split (S = super, P = performance, E = efficiency), GPU cores, memory bandwidth and real RAM options. Safari and Firefox hide the chip, the RAM size and the real core count (Safari reports at most 8) — pick chip and RAM once; the choice is remembered in this browser only. Where two variants share a core count (e.g. M5 Max 32- vs 40-core GPU) your RAM choice decides. Unified-memory PCs (AMD Ryzen AI Max / Strix Halo, NVIDIA DGX Spark, Snapdragon X, Intel Lunar / Panther Lake) are recognised too. Dedicated GPUs — incl. laptop variants, which often have less VRAM than the desktop card of the same name — are matched against a VRAM/bandwidth table.</p>
     <p><b>Speed (tok/s):</b> a rough decode-speed estimate = memory bandwidth ÷ active weights read per token. It's a ballpark, not a measured benchmark.</p>
     <p><b>Limits:</b> browsers can't read RAM/VRAM exactly — <code>navigator.deviceMemory</code> is rounded (and often capped at 8 GB), VRAM is inferred from the GPU name. Correct any value manually if needed.</p>
     <p>To actually run models: <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">Ollama</a>, <a href="https://lmstudio.ai" target="_blank" rel="noopener noreferrer">LM Studio</a> or <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener noreferrer">llama.cpp</a>.</p>`;
