@@ -27,7 +27,7 @@ function icon(name, size) {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 }
 
-const state = { quant: "Q4_K_M", ctx: 8192, onlyFit: false, source: "curated", hfModels: [], hfLoaded: false };
+const state = { quant: "Q4_K_M", ctx: 8192, onlyFit: false, sort: "size", minTps: 0, source: "curated", hfModels: [], hfLoaded: false };
 
 /* ===== Small helpers ===== */
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -269,11 +269,12 @@ function estimateTokps(model, fit) {
   if (!isFinite(t) || t <= 0) return null;
   return t >= 100 ? Math.round(t / 5) * 5 : t >= 10 ? Math.round(t) : +t.toFixed(1);
 }
+const speedClass = t => t == null ? "" : t < 5 ? "sp-1" : t < 15 ? "sp-2" : t < 30 ? "sp-3" : "sp-4";
 function speedHTML(model, fit, active) {
-  if (fit === "no") return "";
+  if (fit === "no") return `<span class="speed-tag"></span>`;
   const t = estimateTokps(model, fit);
   const label = t != null ? `~${t} tok/s` : speedLabel(fit, active);
-  return `${icon("gauge",13)} ${label}`;
+  return `<span class="speed-tag ${speedClass(t)}">${icon("gauge",13)} ${label}</span>`;
 }
 
 /* ===== Commands =====
@@ -474,6 +475,23 @@ function gpuSpecHTML() {
   return parts.length ? `${icon("zap",12)} ${parts.join(" · ")}` : "";
 }
 
+function benchValue(m, key) {
+  if (m.source === "hf" || !has(BENCH, m.name) || BENCH[m.name][key] == null) return null;
+  const v = Number(BENCH[m.name][key]);
+  return Number.isFinite(v) ? v : null;
+}
+/* Sort keys: size ascending, everything else descending; models without a value go last */
+const SORT_KEYS = {
+  swe: x => benchValue(x.m, "swe"), gpqa: x => benchValue(x.m, "gpqa"), mmluPro: x => benchValue(x.m, "mmluPro"),
+  tps: x => x.tps,
+};
+function sortModels(list) {
+  const key = has(SORT_KEYS, state.sort) ? SORT_KEYS[state.sort] : null;
+  if (!key) return list;
+  return list.map(x => ({ x, k: key(x) })).sort((a, b) =>
+    (a.k == null) - (b.k == null) || (b.k || 0) - (a.k || 0) || a.x.m.params - b.x.m.params).map(o => o.x);
+}
+
 function benchHTML(m) {
   if (m.source === "hf" || !has(BENCH, m.name)) return "";
   const b = BENCH[m.name];
@@ -534,7 +552,7 @@ function modelCardHTML(m) {
       ${cmds}
       <div class="foot">
         <span class="req">Needs <b>${fmtGB(need)}</b> · ${esc(state.quant)} · ${capped ? `<span class="ctx-max" title="${esc(`Capped at this model's native context window (${ctx.toLocaleString("en-US")} tokens)`)}">${fmtCtx(ctx)} (max)</span>` : fmtCtx(ctx)}</span>
-        <span class="speed-tag">${speedHTML(m, fit, active)}</span>
+        ${speedHTML(m, fit, active)}
       </div>
     </div>`;
 }
@@ -542,6 +560,7 @@ function modelCardHTML(m) {
 function renderModels() {
   const baseList = state.source === "hf" ? state.hfModels : CURATED;
   const evaluated = baseList.map(m => ({ m, ...evaluate(m) })).sort((a, b) => a.m.params - b.m.params);
+  evaluated.forEach(x => { x.tps = x.fit === "no" ? null : estimateTokps(x.m, x.fit); });
   const container = document.getElementById("models");
 
   if (state.source === "hf" && !state.hfLoaded) {
@@ -549,10 +568,10 @@ function renderModels() {
   } else if (!evaluated.length) {
     container.innerHTML = `<div class="placeholder" style="grid-column:1/-1">No models found. Try a different search term.</div>`;
   } else {
-    const visible = evaluated.filter(x => !state.onlyFit || x.fit !== "no");
+    const visible = sortModels(evaluated.filter(x => (!state.onlyFit || x.fit !== "no") && (!state.minTps || (x.tps != null && x.tps >= state.minTps))));
     container.innerHTML = visible.length
       ? visible.map(x => modelCardHTML(x.m)).join("")
-      : `<div class="placeholder" style="grid-column:1/-1">None of the models run with these settings. Turn off “Runnable only” or raise RAM / VRAM.</div>`;
+      : `<div class="placeholder" style="grid-column:1/-1">None of the models match these settings. Lower “Min. speed”, turn off “Runnable only” or raise RAM / VRAM.</div>`;
   }
   renderSummary(evaluated);
 }
@@ -616,7 +635,7 @@ function renderStaticChrome() {
     <p><b>HuggingFace catalog:</b> parameter size is parsed from the model name (e.g. “…-8B-…”). Models with no detectable size are skipped. <code>ollama run hf.co/REPO:QUANT</code> pulls GGUF straight from HuggingFace; <code>lms get https://huggingface.co/REPO@QUANT</code> (or the in-app search) does the same in LM Studio.</p>
     <p><b>Commands (curated):</b> <code>ollama run TAG</code> pulls Ollama's default build of the model (often Q4_K_M, some are NVFP4 or MLX) whatever quantization is selected here. The LM Studio key points to the lmstudio-community GGUF, which usually ships only Q4_K_M, Q6_K, Q8_0 and BF16 — other <code>@quant</code> values may not exist. Models without a package on either tool link to their GGUFs via the model card.</p>
     <p><b>Hardware detection:</b> on Apple Silicon (M1 – M6, A18 Pro) Chromium browsers expose the chip (e.g. “Apple M5 Pro”), which is mapped to its core split (S = super, P = performance, E = efficiency), GPU cores, memory bandwidth and real RAM options. Safari and Firefox hide the chip, the RAM size and the real core count (Safari reports at most 8) — pick chip and RAM once; the choice is remembered in this browser only. Where two variants share a core count (e.g. M5 Max 32- vs 40-core GPU) your RAM choice decides. Unified-memory PCs (AMD Ryzen AI Max / Strix Halo, NVIDIA DGX Spark, Snapdragon X, Intel Lunar / Panther Lake) are recognised too. Dedicated GPUs — incl. laptop variants, which often have less VRAM than the desktop card of the same name — are matched against a VRAM/bandwidth table.</p>
-    <p><b>Speed (tok/s):</b> a rough decode-speed estimate = memory bandwidth ÷ active weights read per token. It's a ballpark, not a measured benchmark.</p>
+    <p><b>Speed (tok/s):</b> a rough decode-speed estimate = memory bandwidth ÷ active weights read per token. It's a ballpark, not a measured benchmark. Colour: red below 5 tok/s (painful), amber 5–15 (readable), light green 15–30 (smooth), green 30+ (fast). Use <i>Sort</i> and <i>Min. speed</i> to find e.g. the best SWE-bench model that still runs fast.</p>
     <p><b>Limits:</b> browsers can't read RAM/VRAM exactly — <code>navigator.deviceMemory</code> is rounded (and often capped at 8 GB), VRAM is inferred from the GPU name. Correct any value manually if needed.</p>
     <p>To actually run models: <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">Ollama</a>, <a href="https://lmstudio.ai" target="_blank" rel="noopener noreferrer">LM Studio</a> or <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener noreferrer">llama.cpp</a>.</p>`;
 
@@ -649,6 +668,8 @@ function initControls() {
     renderModels();
   });
   document.getElementById("onlyFit").addEventListener("change", e => { state.onlyFit = e.target.checked; renderModels(); });
+  document.getElementById("sortBy").addEventListener("change", e => { state.sort = has(SORT_KEYS, e.target.value) ? e.target.value : "size"; renderModels(); });
+  document.getElementById("minTps").addEventListener("change", e => { state.minTps = Math.max(0, num(e.target.value, 0)); renderModels(); });
 
   document.querySelectorAll("#sourceTabs button").forEach(btn => {
     btn.addEventListener("click", () => {
