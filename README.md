@@ -11,7 +11,7 @@ The hardware analysis runs **100 % client-side**. Only the optional HuggingFace 
 ## Features
 
 - 🔍 **Browser hardware detection** — CPU cores (`navigator.hardwareConcurrency`) and GPU name (WebGL `WEBGL_debug_renderer_info` + a high-performance WebGPU adapter).
-  - 🍎 **Apple Silicon M1–M6 and A18 Pro (MacBook Neo)** — the chip is mapped to its **core tiers** (S = super, P = performance, E = efficiency), GPU cores, memory bandwidth and real RAM options. Safari and Firefox hide the chip, so there's a **chip picker**; where two variants share a core count (e.g. M5 Max 32- vs 40-core GPU), your RAM choice decides.
+  - 🍎 **Apple Silicon M1–M6 and A18 Pro (MacBook Neo)** — the chip is mapped to its **core tiers** (S = super, P = performance, E = efficiency), GPU cores, memory bandwidth and real RAM options. Safari and Firefox hide the chip, so there's a **chip picker** (chip and RAM pick are remembered in `localStorage`); where two variants share a core count (e.g. M5 Max 32- vs 40-core GPU), your RAM choice decides.
   - 🧩 **Unified-memory PCs** — AMD Ryzen AI Max (Strix Halo), NVIDIA DGX Spark / GB10, Snapdragon X / X2, Intel Lunar Lake / Panther Lake and AMD Ryzen AI 300 (Strix Point) are recognised with their RAM options and bandwidth.
   - 🎮 **Dedicated GPUs** — matched against a VRAM + bandwidth table covering GeForce RTX 20–50, Radeon RX 6000–9000, Intel Arc A / B / Pro B, RTX PRO Blackwell and older workstation cards, and datacenter GPUs (T4 … B300). **Laptop variants** are matched separately: an RTX 4090 Laptop has 16 GB, not 24.
 - ⚡ **Speed estimate (tok/s)** — rough decode speed from memory bandwidth ÷ active weights per token (unified memory or known GPU). CPU-only runs assume 80 GB/s (typical dual-channel DDR5).
@@ -99,7 +99,7 @@ All tables live in `assets/js/data.js`:
 ## Limitations
 
 - `navigator.deviceMemory` is rounded and capped at 8 GB; correct your real RAM in the UI.
-- Safari caps `hardwareConcurrency` at 8 and only reports "Apple GPU"; Firefox reports every Apple Silicon Mac as "Apple M1, or similar". Pick your chip from the list.
+- Safari caps `hardwareConcurrency` at 8 and only reports "Apple GPU"; Firefox reports every Apple Silicon Mac as "Apple M1, or similar". Neither exposes the RAM size. Pick chip and RAM once; the core count then comes from the chip.
 - Firefox buckets GPUs into representative models ("…, or similar"), so the matched GPU and VRAM are approximate; check them. Some privacy modes mask the GPU renderer string entirely.
 - The 8 GB and 16 GB variants of the RTX 5060 Ti and RX 9060 XT can't be told apart from the browser (the 5060 Ti defaults to 8 GB, the 9060 XT to 16 GB); edit VRAM if needed.
 - VRAM is guessed from the GPU name via a lookup table; unknown GPUs default to 0 (edit manually).
