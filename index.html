@@ -256,6 +256,11 @@
   .model .foot .ctx-max { cursor: help; text-decoration: underline dotted; text-underline-offset: 2px; }
   .speed-tag { font-weight: 650; display:inline-flex; align-items:center; gap:5px; }
   .speed-tag .ic { color: var(--faint); }
+  /* tok/s scale: < 5 painful · 5–15 readable · 15–30 smooth · 30+ fast */
+  .speed-tag.sp-1, .speed-tag.sp-1 .ic { color: var(--red); }
+  .speed-tag.sp-2, .speed-tag.sp-2 .ic { color: var(--amber); }
+  .speed-tag.sp-3, .speed-tag.sp-3 .ic { color: color-mix(in srgb, var(--green) 55%, var(--amber)); }
+  .speed-tag.sp-4, .speed-tag.sp-4 .ic { color: var(--green); }
 
   .hidden { display: none !important; }
 
@@ -319,6 +324,26 @@
         <label for="ctx" id="lblCtx">Context</label>
         <span class="ctxVal" id="ctxVal">8K</span>
         <input type="range" id="ctx" min="0" max="7" step="1" value="2" aria-valuetext="8K tokens" />
+      </div>
+      <div class="ctrl-group">
+        <label for="sortBy" id="lblSort">Sort</label>
+        <select id="sortBy">
+          <option value="size">Size</option>
+          <option value="swe">SWE-bench ↓</option>
+          <option value="gpqa">GPQA-D ↓</option>
+          <option value="mmluPro">MMLU-Pro ↓</option>
+          <option value="tps">Speed (tok/s) ↓</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label for="minTps" id="lblMinTps">Min. speed</label>
+        <select id="minTps">
+          <option value="0">any</option>
+          <option value="5">≥ 5 tok/s</option>
+          <option value="15">≥ 15 tok/s</option>
+          <option value="30">≥ 30 tok/s</option>
+          <option value="60">≥ 60 tok/s</option>
+        </select>
       </div>
       <div class="ctrl-group">
         <label class="switch">

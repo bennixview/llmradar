@@ -15,6 +15,7 @@ The hardware analysis runs **100 % client-side**. Only the optional HuggingFace 
   - 🧩 **Unified-memory PCs** — AMD Ryzen AI Max (Strix Halo), NVIDIA DGX Spark / GB10, Snapdragon X / X2, Intel Lunar Lake / Panther Lake and AMD Ryzen AI 300 (Strix Point) are recognised with their RAM options and bandwidth.
   - 🎮 **Dedicated GPUs** — matched against a VRAM + bandwidth table covering GeForce RTX 20–50, Radeon RX 6000–9000, Intel Arc A / B / Pro B, RTX PRO Blackwell and older workstation cards, and datacenter GPUs (T4 … B300). **Laptop variants** are matched separately: an RTX 4090 Laptop has 16 GB, not 24.
 - ⚡ **Speed estimate (tok/s)** — rough decode speed from memory bandwidth ÷ active weights per token (unified memory or known GPU). CPU-only runs assume 80 GB/s (typical dual-channel DDR5).
+- 🔎 **Sort & filter** — sort by SWE-bench, GPQA-Diamond, MMLU-Pro or speed, filter by a minimum tok/s; speeds are colour-coded from red (< 5 tok/s) to green (30+ tok/s).
 - ✏️ **Editable values & RAM presets** — browsers can't read RAM/VRAM exactly (`deviceMemory` is rounded/capped), so every value can be overridden, with one-click presets for the detected chip's or platform's configs. Recommendations update live.
 - 📚 **Two catalogs**
   - **Curated** — 41 hand-picked models as of Nov 2026 (Qwen3.5 / 3.6 / 3.8, Gemma 4, gpt-oss, GLM-4.7-Flash, Nemotron 3.5, Devstral Small 2, Ministral 3, Muse Glimmer, DeepSeek V4, Kimi K3 …) with accurate parameter counts and MoE active-param info.
