@@ -2,14 +2,16 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
+<!-- Strict CSP: no inline scripts, only same-origin files + the HuggingFace API. 'unsafe-inline' styles are needed
+     for the <style> block and style="" attributes. 'self' also matches file:// URLs (verified in WebKit). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://huggingface.co; base-uri 'none'; form-action 'none'" />
+<meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>llmradar — which AI models can your computer run?</title>
 <meta name="description" content="Scan your machine in the browser and see which local LLMs it can run — with hardware detection, benchmark scores at a glance, a live HuggingFace catalog, and ready-to-run Ollama & LM Studio commands." />
 
-<!-- Set theme before paint to avoid flash -->
-<script>
-(function(){try{var t=localStorage.getItem('llmradar-theme');if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
-</script>
+<!-- Set theme before paint to avoid flash (synchronous on purpose) -->
+<script src="assets/js/theme-init.js"></script>
 
 <style>
   /* Self-hosted Inter (SIL Open Font License 1.1) — no third-party request, no Google Fonts */
@@ -138,6 +140,7 @@
   .ram-chip:hover { color:var(--text); border-color:var(--accent-2); }
   .ram-chip.active { background:var(--accent); color:var(--accent-ink); border-color:transparent; }
   .ram-presets-hint { font-size:11px; color:var(--faint); }
+  .chip-select { margin-top:6px; padding:5px 8px; font-size:12.5px; }
   .spec-line { display:inline-flex; align-items:center; gap:5px; }
   .hint { font-size: 13px; color: var(--faint); margin-top: 13px; display:flex; gap:8px; align-items:flex-start; }
   .hint .ic { color: var(--accent-2); margin-top:2px; }
@@ -190,6 +193,7 @@
   #hfStatus a { color: var(--muted); }
 
   /* Summary */
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   .summary { background: linear-gradient(180deg, var(--card-2), var(--card)); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; box-shadow: var(--shadow); }
   .summary h3 { margin: 0 0 6px; font-size: 19px; font-weight:750; letter-spacing:-.02em; }
   .summary p { margin: 0; color: var(--muted); font-size: 14px; }
@@ -243,13 +247,21 @@
   .copybtn { appearance: none; border: 1px solid var(--border); background: var(--card-2); color: var(--muted); cursor: pointer; border-radius: 7px; padding: 5px 7px; flex: 0 0 auto; transition: .15s; display:inline-flex; }
   .copybtn:hover { color: var(--text); border-color: var(--accent-2); }
   .copybtn.done { color: var(--green); border-color: var(--green); }
+  .copybtn.fail { color: var(--red); border-color: var(--red); }
+  .cmd .tool .cmd-note { display: block; font-size: 9px; font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--amber); cursor: help; }
+  .cmd-none { font-size: 11.5px; color: var(--faint); background: var(--bg); border: 1px dashed var(--border-soft); border-radius: 9px; padding: 8px 11px; }
 
   .model .foot { display: flex; justify-content: space-between; align-items:center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border-soft); padding-top: 10px; }
   .model .foot .req b { color: var(--text); font-weight:650; }
+  .model .foot .ctx-max { cursor: help; text-decoration: underline dotted; text-underline-offset: 2px; }
   .speed-tag { font-weight: 650; display:inline-flex; align-items:center; gap:5px; }
   .speed-tag .ic { color: var(--faint); }
 
   .hidden { display: none !important; }
+
+  /* Keyboard focus */
+  button:focus-visible, a:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent-2); outline-offset: 2px; }
   .placeholder { text-align: center; color: var(--faint); padding: 56px 20px; border: 1px dashed var(--border); border-radius: var(--radius); }
   .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color: var(--accent-2); border-radius:50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -262,11 +274,16 @@
   details.notes p { font-size: 13px; color: var(--muted); }
   details.notes b { color: var(--text); font-weight:600; }
   details.notes code { background: var(--bg); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { transition: none !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
 </style>
 </head>
 <body>
 
-<button class="theme-toggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme"></button>
+<button type="button" class="theme-toggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme"></button>
 
 <div class="wrap">
 
@@ -275,7 +292,7 @@
     <div class="badge"><span class="dot"></span> Hardware analysis runs 100% in your browser — nothing leaves your device</div>
     <h1>Which AI models can your computer run?</h1>
     <p class="sub">We briefly read your hardware — CPU, memory and GPU — and show which local language models can realistically run. With benchmark scores at a glance, a live HuggingFace catalog, and ready-to-run commands for Ollama &amp; LM Studio.</p>
-    <button class="cta" id="checkBtn"></button>
+    <button type="button" class="cta" id="checkBtn"></button>
     <div class="privacy-note">The hardware analysis is fully local. Only the optional model catalog &amp; benchmark links use HuggingFace.</div>
   </header>
 
@@ -289,9 +306,9 @@
     <div class="controls">
       <div class="ctrl-group">
         <label id="lblSource">Source</label>
-        <div class="segmented" id="sourceTabs">
-          <button data-src="curated" class="active">Curated</button>
-          <button data-src="hf" id="hfTabBtn">HuggingFace</button>
+        <div class="segmented" id="sourceTabs" role="group" aria-labelledby="lblSource">
+          <button type="button" data-src="curated" class="active" aria-pressed="true">Curated</button>
+          <button type="button" data-src="hf" id="hfTabBtn" aria-pressed="false">HuggingFace</button>
         </div>
       </div>
       <div class="ctrl-group">
@@ -301,7 +318,7 @@
       <div class="ctrl-group">
         <label for="ctx" id="lblCtx">Context</label>
         <span class="ctxVal" id="ctxVal">8K</span>
-        <input type="range" id="ctx" min="0" max="6" step="1" value="2" />
+        <input type="range" id="ctx" min="0" max="7" step="1" value="2" aria-valuetext="8K tokens" />
       </div>
       <div class="ctrl-group">
         <label class="switch">
@@ -314,16 +331,17 @@
     <div class="hfbar hidden" id="hfBar">
       <div class="search-wrap">
         <span id="hfSearchIcon"></span>
-        <input type="search" id="hfSearch" placeholder="Search HuggingFace for GGUF models … e.g. 'qwen3', 'llama 3.3', 'phi-4'" />
+        <input type="search" id="hfSearch" aria-label="Search HuggingFace for GGUF models" maxlength="100" placeholder="Search HuggingFace for GGUF models … e.g. 'qwen3', 'llama 3.3', 'phi-4'" />
       </div>
-      <button class="btn primary" id="hfSearchBtn">Search</button>
-      <button class="btn" id="hfTopBtn">Top models</button>
-      <span id="hfStatus"></span>
+      <button type="button" class="btn primary" id="hfSearchBtn">Search</button>
+      <button type="button" class="btn" id="hfTopBtn">Top models</button>
+      <span id="hfStatus" role="status" aria-live="polite"></span>
     </div>
   </section>
 
   <section id="summarySection" class="hidden">
     <div class="summary" id="summary"></div>
+    <div id="summaryLive" class="sr-only" role="status" aria-live="polite"></div>
   </section>
 
   <section id="modelSection" class="hidden">
@@ -341,617 +359,7 @@
 
 </div>
 
-<script>
-"use strict";
-
-/* ===== Icons (Lucide, ISC license — inlined, no runtime fetch) ===== */
-const ICONS = {
-  cpu: '<path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
-  "memory-stick": '<path d="M12 12v-2"/><path d="M12 18v-2"/><path d="M16 12v-2"/><path d="M16 18v-2"/><path d="M2 11h1.5"/><path d="M20 18v-2"/><path d="M20.5 11H22"/><path d="M4 18v-2"/><path d="M8 12v-2"/><path d="M8 18v-2"/><rect x="2" y="6" width="20" height="10" rx="2"/>',
-  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
-  microchip: '<path d="M10 12h4"/><path d="M10 17h4"/><path d="M10 7h4"/><path d="M18 12h2"/><path d="M18 18h2"/><path d="M18 6h2"/><path d="M4 12h2"/><path d="M4 18h2"/><path d="M4 6h2"/><rect x="6" y="2" width="12" height="20" rx="2"/>',
-  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
-  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
-  check: '<path d="M20 6 9 17l-5-5"/>',
-  search: '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
-  flame: '<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
-  moon: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
-  "external-link": '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
-  gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
-  "sliders-horizontal": '<path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/>',
-  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
-  "badge-check": '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
-  "chart-bar": '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16h8"/><path d="M7 11h12"/><path d="M7 6h3"/>',
-  layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>',
-};
-function icon(name, size) {
-  size = size || 18;
-  return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
-}
-
-/* ===== Quantizations (avg bits per weight) ===== */
-const QUANTS = {
-  "Q4_K_M": { label: "Q4_K_M · recommended (balanced)", bpw: 4.85 },
-  "Q5_K_M": { label: "Q5_K_M · slightly higher quality", bpw: 5.70 },
-  "Q6_K":   { label: "Q6_K · near full quality",         bpw: 6.60 },
-  "Q8_0":   { label: "Q8_0 · very high quality",          bpw: 8.50 },
-  "FP16":   { label: "FP16 · full precision (large)",     bpw: 16.0 },
-};
-
-const CTX_STEPS  = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
-const CTX_LABELS = ["2K", "4K", "8K", "16K", "32K", "64K", "128K"];
-
-const state = { quant: "Q4_K_M", ctx: 8192, onlyFit: false, source: "curated", hfModels: [], hfLoaded: false };
-
-/* ===== Curated catalog (2026) =====
-   params=total (B) · active=active params (MoE) · hf=canonical HuggingFace repo
-   ollama=Ollama tag · lms=LM Studio search name                              */
-const CURATED = [
-  { name: "Qwen3 0.6B",             params: 0.6,  cat: "Tiny",                 hf: "Qwen/Qwen3-0.6B",                          ollama: "qwen3:0.6b",        lms: "qwen3-0.6b" },
-  { name: "Gemma 3 1B",             params: 1.0,  cat: "Tiny",                 hf: "google/gemma-3-1b-it",                     ollama: "gemma3:1b",         lms: "gemma-3-1b" },
-  { name: "Llama 3.2 1B",           params: 1.24, cat: "Tiny",                 hf: "meta-llama/Llama-3.2-1B-Instruct",         ollama: "llama3.2:1b",       lms: "llama-3.2-1b" },
-  { name: "Qwen3 1.7B",             params: 1.72, cat: "Small",                hf: "Qwen/Qwen3-1.7B",                          ollama: "qwen3:1.7b",        lms: "qwen3-1.7b" },
-  { name: "SmolLM2 1.7B",           params: 1.7,  cat: "Small",                hf: "HuggingFaceTB/SmolLM2-1.7B-Instruct",      ollama: "smollm2:1.7b",      lms: "smollm2-1.7b" },
-  { name: "Llama 3.2 3B",           params: 3.2,  cat: "Small",                hf: "meta-llama/Llama-3.2-3B-Instruct",         ollama: "llama3.2:3b",       lms: "llama-3.2-3b" },
-  { name: "Phi-4-mini 3.8B",        params: 3.8,  cat: "Small",                hf: "microsoft/Phi-4-mini-instruct",            ollama: "phi4-mini",         lms: "phi-4-mini" },
-  { name: "Qwen3 4B",               params: 4.0,  cat: "Small",                hf: "Qwen/Qwen3-4B",                            ollama: "qwen3:4b",          lms: "qwen3-4b" },
-  { name: "Gemma 3 4B",             params: 4.3,  cat: "Small",                hf: "google/gemma-3-4b-it",                     ollama: "gemma3:4b",         lms: "gemma-3-4b" },
-  { name: "Mistral 7B",             params: 7.2,  cat: "Medium",               hf: "mistralai/Mistral-7B-Instruct-v0.3",       ollama: "mistral",           lms: "mistral-7b" },
-  { name: "DeepSeek-R1-Distill 7B", params: 7.0,  cat: "Medium · Reasoning",   hf: "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",  ollama: "deepseek-r1:7b",    lms: "deepseek-r1-distill-qwen-7b" },
-  { name: "Llama 3.1 8B",           params: 8.0,  cat: "Medium",               hf: "meta-llama/Llama-3.1-8B-Instruct",         ollama: "llama3.1:8b",       lms: "llama-3.1-8b" },
-  { name: "Qwen3 8B",               params: 8.2,  cat: "Medium",               hf: "Qwen/Qwen3-8B",                            ollama: "qwen3:8b",          lms: "qwen3-8b" },
-  { name: "gpt-oss 20B",            params: 21.0, active: 3.6, cat: "MoE · lean", hf: "openai/gpt-oss-20b",                    ollama: "gpt-oss:20b",       lms: "gpt-oss-20b" },
-  { name: "Qwen3 30B-A3B",          params: 30.5, active: 3.3, cat: "MoE · lean", hf: "Qwen/Qwen3-30B-A3B",                    ollama: "qwen3:30b-a3b",     lms: "qwen3-30b-a3b" },
-  { name: "Gemma 3 12B",            params: 12.0, cat: "Mid-large",            hf: "google/gemma-3-12b-it",                    ollama: "gemma3:12b",        lms: "gemma-3-12b" },
-  { name: "Mistral Nemo 12B",       params: 12.0, cat: "Mid-large",            hf: "mistralai/Mistral-Nemo-Instruct-2407",     ollama: "mistral-nemo",      lms: "mistral-nemo" },
-  { name: "Phi-4 14B",              params: 14.7, cat: "Mid-large",            hf: "microsoft/phi-4",                          ollama: "phi4",              lms: "phi-4" },
-  { name: "Qwen3 14B",              params: 14.8, cat: "Mid-large",            hf: "Qwen/Qwen3-14B",                           ollama: "qwen3:14b",         lms: "qwen3-14b" },
-  { name: "DeepSeek-R1-Distill 14B",params: 14.0, cat: "Mid-large · Reasoning",hf: "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B", ollama: "deepseek-r1:14b",   lms: "deepseek-r1-distill-qwen-14b" },
-  { name: "Mistral Small 24B",      params: 23.6, cat: "Large",                hf: "mistralai/Mistral-Small-24B-Instruct-2501",ollama: "mistral-small",     lms: "mistral-small-24b" },
-  { name: "Gemma 3 27B",            params: 27.4, cat: "Large",                hf: "google/gemma-3-27b-it",                    ollama: "gemma3:27b",        lms: "gemma-3-27b" },
-  { name: "Qwen3 32B",              params: 32.8, cat: "Large",                hf: "Qwen/Qwen3-32B",                           ollama: "qwen3:32b",         lms: "qwen3-32b" },
-  { name: "QwQ 32B",                params: 32.8, cat: "Large · Reasoning",    hf: "Qwen/QwQ-32B",                             ollama: "qwq",               lms: "qwq-32b" },
-  { name: "Mixtral 8x7B",           params: 46.7, active: 12.9, cat: "MoE",    hf: "mistralai/Mixtral-8x7B-Instruct-v0.1",     ollama: "mixtral:8x7b",      lms: "mixtral-8x7b" },
-  { name: "Llama 3.3 70B",          params: 70.6, cat: "Very large",           hf: "meta-llama/Llama-3.3-70B-Instruct",        ollama: "llama3.3",          lms: "llama-3.3-70b" },
-  { name: "gpt-oss 120B",           params: 117,  active: 5.1,  cat: "MoE · large", hf: "openai/gpt-oss-120b",                ollama: "gpt-oss:120b",      lms: "gpt-oss-120b" },
-  { name: "Qwen3 235B-A22B",        params: 235,  active: 22,   cat: "MoE · huge",  hf: "Qwen/Qwen3-235B-A22B",               ollama: "qwen3:235b-a22b",   lms: "qwen3-235b-a22b" },
-  { name: "DeepSeek-R1 671B",       params: 671,  active: 37,   cat: "MoE · frontier", hf: "deepseek-ai/DeepSeek-R1",         ollama: "deepseek-r1:671b",  lms: "deepseek-r1-671b" },
-];
-
-/* ===== Benchmark snapshot (public reports, instruct/reasoning variants, ~2026) =====
-   Values shown only where reliably sourced; gaps fall back to the model card link.
-   mmluPro = MMLU-Pro · gpqa = GPQA-Diamond · swe = SWE-bench Verified (all %).      */
-const BENCH = {
-  "Gemma 3 4B":             { mmluPro: 44, gpqa: 31 },
-  "Gemma 3 12B":            { mmluPro: 61, gpqa: 41 },
-  "Gemma 3 27B":            { mmluPro: 68, gpqa: 42 },
-  "Phi-4 14B":              { gpqa: 56 },
-  "Qwen3 8B":               { gpqa: 63 },
-  "Qwen3 14B":              { mmluPro: 61 },
-  "Qwen3 30B-A3B":          { mmluPro: 61, gpqa: 44 },
-  "Qwen3 32B":              { mmluPro: 66 },
-  "DeepSeek-R1-Distill 7B": { gpqa: 49 },
-  "DeepSeek-R1-Distill 14B":{ gpqa: 59 },
-  "DeepSeek-R1 671B":       { mmluPro: 84, gpqa: 72, swe: 49 },
-  "gpt-oss 120B":           { mmluPro: 90, gpqa: 81, swe: 62 },
-};
-
-/* ===== GPU lookup: [regex, VRAM GB, memory bandwidth GB/s] ===== */
-const GPUS = [
-  [/rtx\s*5090/i,32,1792],[/rtx\s*5080/i,16,960],[/rtx\s*5070\s*ti/i,16,896],[/rtx\s*5070/i,12,672],[/rtx\s*5060\s*ti/i,16,448],[/rtx\s*5060/i,8,448],
-  [/rtx\s*4090/i,24,1008],[/rtx\s*4080/i,16,717],[/rtx\s*4070\s*ti/i,12,672],[/rtx\s*4070/i,12,504],[/rtx\s*4060\s*ti/i,8,288],[/rtx\s*4060/i,8,272],
-  [/rtx\s*3090/i,24,936],[/rtx\s*3080\s*ti/i,12,912],[/rtx\s*3080/i,10,760],[/rtx\s*3070/i,8,448],[/rtx\s*3060\s*ti/i,8,448],[/rtx\s*3060/i,12,360],[/rtx\s*3050/i,8,224],
-  [/rtx\s*2080\s*ti/i,11,616],[/rtx\s*2080/i,8,448],[/rtx\s*2070/i,8,448],[/rtx\s*2060/i,6,336],[/gtx\s*1080\s*ti/i,11,484],[/gtx\s*1070/i,8,256],[/gtx\s*1660/i,6,192],[/gtx\s*1060/i,6,192],
-  [/h100/i,80,3350],[/a100/i,40,1555],[/l40s?/i,48,864],[/a6000/i,48,768],[/a5000/i,24,768],[/a4000/i,16,448],[/\bt4\b/i,16,320],
-  [/(rx\s*)?7900\s*xtx/i,24,960],[/(rx\s*)?7900\s*xt/i,20,800],[/(rx\s*)?7800\s*xt/i,16,624],[/(rx\s*)?7700\s*xt/i,12,432],[/(rx\s*)?6900\s*xt/i,16,512],[/(rx\s*)?6800/i,16,512],[/(rx\s*)?6700\s*xt/i,12,384],
-  [/arc\s*a770/i,16,560],[/arc\s*b580/i,12,456],[/arc\s*a750/i,8,512],
-];
-
-/* ===== Apple Silicon database =====
-   Keyed by chip; per CPU-core-count bin: P/E cores, GPU cores, memory bandwidth (GB/s).
-   ram = real configurable options (GB). Values are typical/approximate.            */
-const APPLE_CHIPS = {
-  "M1":       { ram: [8,16],            bins: { 8:{p:4,e:4,gpu:8,bw:68} } },
-  "M1 Pro":   { ram: [16,32],           bins: { 10:{p:8,e:2,gpu:16,bw:200}, 8:{p:6,e:2,gpu:14,bw:200} } },
-  "M1 Max":   { ram: [32,64],           bins: { 10:{p:8,e:2,gpu:32,bw:400} } },
-  "M1 Ultra": { ram: [64,128],          bins: { 20:{p:16,e:4,gpu:64,bw:800} } },
-  "M2":       { ram: [8,16,24],         bins: { 8:{p:4,e:4,gpu:10,bw:100} } },
-  "M2 Pro":   { ram: [16,32],           bins: { 12:{p:8,e:4,gpu:19,bw:200}, 10:{p:6,e:4,gpu:16,bw:200} } },
-  "M2 Max":   { ram: [32,64,96],        bins: { 12:{p:8,e:4,gpu:38,bw:400} } },
-  "M2 Ultra": { ram: [64,128,192],      bins: { 24:{p:16,e:8,gpu:76,bw:800} } },
-  "M3":       { ram: [8,16,24],         bins: { 8:{p:4,e:4,gpu:10,bw:100} } },
-  "M3 Pro":   { ram: [18,36],           bins: { 12:{p:6,e:6,gpu:18,bw:150}, 11:{p:5,e:6,gpu:14,bw:150} } },
-  "M3 Max":   { ram: [36,48,64,96,128], bins: { 16:{p:12,e:4,gpu:40,bw:400}, 14:{p:10,e:4,gpu:30,bw:300} } },
-  "M3 Ultra": { ram: [96,256,512],      bins: { 32:{p:24,e:8,gpu:80,bw:800} } },
-  "M4":       { ram: [16,24,32],        bins: { 10:{p:4,e:6,gpu:10,bw:120}, 8:{p:4,e:4,gpu:8,bw:120} } },
-  "M4 Pro":   { ram: [24,48,64],        bins: { 14:{p:10,e:4,gpu:20,bw:273}, 12:{p:8,e:4,gpu:16,bw:273} } },
-  "M4 Max":   { ram: [36,48,64,128],    bins: { 16:{p:12,e:4,gpu:40,bw:546}, 14:{p:10,e:4,gpu:32,bw:410} } },
-};
-function parseAppleChip(renderer, cores) {
-  const m = (renderer || "").match(/Apple\s+(M\d)(?:\s+(Pro|Max|Ultra))?/i);
-  if (!m) return null;
-  const key = "M" + m[1].slice(1) + (m[2] ? " " + m[2][0].toUpperCase() + m[2].slice(1).toLowerCase() : "");
-  const chip = APPLE_CHIPS[key];
-  if (!chip) return { key, ram: [16, 24, 32], bin: null };
-  const bin = chip.bins[cores] || chip.bins[Object.keys(chip.bins)[0]];
-  return { key, ram: chip.ram, bin };
-}
-
-const HW = {
-  cores: null, ram: null, ramConf: "estimated", vram: null, vramConf: "estimated",
-  unified: false, gpuName: "Unknown", platform: "",
-  chip: null, cpuP: null, cpuE: null, gpuCores: null, bandwidth: null, gpuBandwidth: null, ramOptions: null,
-};
-
-/* ===== Hardware detection ===== */
-async function detectHardware() {
-  HW.cores = navigator.hardwareConcurrency || null;
-  // userAgentData.platform is more accurate than navigator.platform (which says "MacIntel" on Apple Silicon)
-  HW.platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-
-  let renderer = "";
-  try {
-    const c = document.createElement("canvas");
-    const gl = c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl");
-    if (gl) {
-      const ext = gl.getExtension("WEBGL_debug_renderer_info");
-      if (ext) renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "";
-      if (!renderer) renderer = gl.getParameter(gl.RENDERER) || "";
-    }
-  } catch (e) {}
-
-  // WebGPU: request the high-performance adapter so dedicated GPUs win over an iGPU on laptops
-  try {
-    if (navigator.gpu) {
-      const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-      if (adapter) {
-        let info = adapter.info;
-        if (!info && adapter.requestAdapterInfo) { try { info = await adapter.requestAdapterInfo(); } catch (e) {} }
-        if (info) {
-          const desc = info.description || info.device || info.architecture || "";
-          if (desc && (!renderer || renderer.length < 4)) renderer = desc;
-        }
-      }
-    }
-  } catch (e) {}
-
-  renderer = (renderer || "").trim();
-  HW.gpuName = renderer || "Not detectable";
-
-  const lower = renderer.toLowerCase();
-  const isApple = /apple/.test(lower);
-  const isIntegrated = /(intel|iris|uhd|hd graphics|radeon graphics|adreno|mali|integrated)/.test(lower) && !/(rx|arc|radeon pro)/.test(lower);
-  const dm = navigator.deviceMemory || null;
-
-  if (isApple) {
-    HW.unified = true;
-    const chip = parseAppleChip(renderer, HW.cores);
-    if (chip) {
-      HW.chip = chip.key;
-      HW.gpuName = "Apple " + chip.key;
-      HW.ramOptions = chip.ram;
-      if (chip.bin) { HW.cpuP = chip.bin.p; HW.cpuE = chip.bin.e; HW.gpuCores = chip.bin.gpu; HW.bandwidth = chip.bin.bw; }
-      // RAM is not readable; pick the chip's lowest config, but trust deviceMemory if it matches an option
-      let def = chip.ram[0];
-      if (dm && chip.ram.includes(dm)) def = dm;
-      HW.ram = def;
-    } else {
-      HW.ram = dm && dm < 8 ? dm : 16;
-    }
-    HW.ramConf = "estimated";
-    HW.vram = HW.ram; HW.vramConf = "estimated";
-  } else {
-    HW.ram = dm || 8;
-    HW.ramConf = dm ? (dm >= 8 ? "estimated" : "measured") : "estimated";
-    let v = 0, bw = null, found = false;
-    for (const [re, gb, b] of GPUS) { if (re.test(lower)) { v = gb; bw = b; found = true; break; } }
-    if (found) { HW.vram = v; HW.gpuBandwidth = bw; HW.vramConf = "estimated"; }
-    else if (isIntegrated) { HW.vram = 0; HW.vramConf = "estimated"; if (renderer) HW.gpuName = renderer + " (integrated)"; }
-    else { HW.vram = 0; HW.vramConf = "estimated"; }
-  }
-}
-
-/* ===== Memory requirement incl. KV cache ===== */
-function kvCacheGB(model, ctxTokens) {
-  const p = model.active ? Math.min(model.params, model.active * 3) : model.params;
-  return 5.5e-5 * Math.pow(p, 0.42) * ctxTokens;
-}
-function requiredGB(model, quantKey, ctxTokens) {
-  const modelGB = model.params * QUANTS[quantKey].bpw / 8;
-  const kv = kvCacheGB(model, ctxTokens);
-  const runtime = modelGB * 0.06 + 0.5;
-  return modelGB + kv + runtime;
-}
-function evaluate(model) {
-  const need = requiredGB(model, state.quant, state.ctx);
-  const active = model.active || model.params;
-  let fit;
-  if (HW.unified) {
-    const usable = HW.ram * 0.72;
-    if (need <= usable) fit = "gpu";
-    else if (need <= HW.ram * 0.9) fit = "tight";
-    else fit = "no";
-  } else {
-    const vramUsable = HW.vram * 0.9;
-    const ramUsable = HW.ram * 0.7;
-    if (HW.vram > 0 && need <= vramUsable) fit = "gpu";
-    else if (HW.vram >= 2 && need <= vramUsable + ramUsable) fit = "offload";
-    else if (need <= ramUsable) fit = "cpu";
-    else fit = "no";
-  }
-  return { need, fit, active };
-}
-function statusLabel(fit) {
-  switch (fit) {
-    case "gpu":     return HW.unified ? "Runs on the GPU (Metal)" : "Runs smoothly on the GPU";
-    case "cpu":     return "Runs on the CPU";
-    case "offload": return "GPU + RAM (offload)";
-    case "tight":   return "Tight — might work";
-    default:        return "Too large for this system";
-  }
-}
-function speedLabel(fit, active) {
-  if (fit === "gpu")     return active <= 9 ? "fast" : active <= 32 ? "usable" : "sluggish";
-  if (fit === "cpu")     return active <= 3 ? "usable" : active <= 8 ? "slow" : "very slow";
-  if (fit === "offload") return "slow";
-  if (fit === "tight")   return "borderline";
-  return "—";
-}
-/* Rough decode speed from memory bandwidth: tok/s ≈ efficiency × BW ÷ (active weights read per token) */
-function estimateTokps(model, fit) {
-  let bw = null, eff = 0.65;
-  if (HW.unified && (fit === "gpu" || fit === "tight")) { bw = HW.bandwidth; eff = 0.62; }
-  else if (fit === "gpu") { bw = HW.gpuBandwidth; eff = 0.72; }
-  else if (fit === "cpu") { bw = 60; eff = 0.45; }            // typical desktop dual-channel DDR5
-  if (!bw) return null;
-  const activeBytesGB = (model.active || model.params) * QUANTS[state.quant].bpw / 8;
-  const t = eff * bw / activeBytesGB;
-  if (!isFinite(t) || t <= 0) return null;
-  return t >= 100 ? Math.round(t / 5) * 5 : t >= 10 ? Math.round(t) : +t.toFixed(1);
-}
-function speedHTML(model, fit, active) {
-  if (fit === "no") return "";
-  const t = estimateTokps(model, fit);
-  const label = t != null ? `~${t} tok/s` : speedLabel(fit, active);
-  return `${icon("gauge",13)} ${label}`;
-}
-
-/* ===== Commands ===== */
-function commandsFor(m) {
-  const q = state.quant, ql = q.toLowerCase();
-  if (m.source === "hf") return { ollama: `ollama run hf.co/${m.hf}:${q}`, lms: `lms get ${m.hf}` };
-  return { ollama: `ollama run ${m.ollama}`, lms: `lms get ${m.lms}@${ql}` };
-}
-
-/* ===== Utils ===== */
-function fmtGB(x) { return (x < 10 ? x.toFixed(1) : Math.round(x)) + " GB"; }
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
-function fmtDownloads(n) { if (!n) return ""; if (n >= 1e6) return (n/1e6).toFixed(1)+"M"; if (n >= 1e3) return Math.round(n/1e3)+"k"; return ""+n; }
-function copyText(t) {
-  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
-  return new Promise((res, rej) => {
-    const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    try { document.execCommand("copy"); res(); } catch (e) { rej(e); } finally { document.body.removeChild(ta); }
-  });
-}
-
-/* ===== HuggingFace catalog ===== */
-const HF_SKIP = /(whisper|embed|rerank|reranker|bge-|gte-|clip|tts|vits|sdxl|flux|stable-diffusion|moderation|guard|vl\b)/i;
-function parseHFModel(item) {
-  const id = item.id || item.modelId;
-  if (!id || HF_SKIP.test(id)) return null;
-  const short = id.split("/").pop();
-  const actMatch = short.match(/[-_]a(\d+(?:\.\d+)?)b\b/i);
-  const moeMatch = short.match(/\b(\d+)\s*x\s*(\d+(?:\.\d+)?)b\b/i);
-  const denseMatches = [...short.matchAll(/(?:^|[-_\s.])(\d+(?:\.\d+)?)\s*b\b/gi)].map(m => parseFloat(m[1])).filter(v => v >= 0.1 && v <= 2000);
-  let params = null, active = null;
-  if (moeMatch) { const n = parseInt(moeMatch[1], 10), sz = parseFloat(moeMatch[2]); params = +(n * sz * 0.86).toFixed(1); active = +(sz * 2).toFixed(1); }
-  else if (denseMatches.length) { params = Math.max(...denseMatches); if (actMatch) active = parseFloat(actMatch[1]); }
-  if (!params) return null;
-  return {
-    name: short.replace(/[-_]?gguf$/i, ""), params, active: active || undefined,
-    cat: active ? "MoE · HF" : "HuggingFace", source: "hf", hf: id,
-    url: "https://huggingface.co/" + id, downloads: item.downloads, likes: item.likes,
-  };
-}
-async function fetchHF(query) {
-  const status = document.getElementById("hfStatus");
-  status.innerHTML = `<span class="spinner"></span> Loading models from huggingface.co …`;
-  const params = new URLSearchParams({ filter: "gguf", sort: "downloads", direction: "-1", limit: "60" });
-  if (query) params.set("search", query);
-  let data;
-  try {
-    const r = await fetch("https://huggingface.co/api/models?" + params.toString());
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    data = await r.json();
-  } catch (e) {
-    status.innerHTML = `⚠️ Couldn't reach HuggingFace (${esc(e.message)}). Check your connection / ad blocker, or use “Curated”.`;
-    return;
-  }
-  const seen = new Set(), parsed = [];
-  for (const item of data) {
-    const m = parseHFModel(item); if (!m) continue;
-    const key = m.name.toLowerCase(); if (seen.has(key)) continue;
-    seen.add(key); parsed.push(m); if (parsed.length >= 30) break;
-  }
-  state.hfModels = parsed; state.hfLoaded = true;
-  const skipped = data.length - parsed.length;
-  status.innerHTML = `${icon("check",15)} ${parsed.length} models with a detectable size loaded` +
-    (skipped > 0 ? ` · ${skipped} skipped (no size in name)` : "") +
-    ` · source: <a href="https://huggingface.co/models?library=gguf" target="_blank" rel="noopener">huggingface.co</a>`;
-  renderModels();
-}
-
-/* ===== Rendering ===== */
-function renderHardware() {
-  const grid = document.getElementById("hwGrid");
-  const confTxt = { measured: "measured", estimated: "estimated", manual: "manual" };
-
-  const cpuDetail = (HW.cpuP && HW.cpuE) ? `${HW.cpuP}P + ${HW.cpuE}E cores · ${esc(HW.platform || "")}` : esc(HW.platform || "");
-  const ramPresets = (HW.unified && HW.ramOptions)
-    ? `<div class="ram-presets">${HW.ramOptions.map(o => `<button class="ram-chip${o === HW.ram ? " active" : ""}" data-ram="${o}">${o}</button>`).join("")}<span class="ram-presets-hint">GB — pick yours</span></div>`
-    : `<div class="detail">editable — enter your real RAM</div>`;
-
-  let gpuDetailParts = [];
-  if (HW.gpuCores) gpuDetailParts.push(`${HW.gpuCores}-core GPU`);
-  const bw = HW.unified ? HW.bandwidth : HW.gpuBandwidth;
-  if (bw) gpuDetailParts.push(`~${bw} GB/s`);
-  const gpuSpec = gpuDetailParts.length ? `<div class="detail spec-line">${icon("zap",12)} ${gpuDetailParts.join(" · ")}</div>` : "";
-
-  grid.innerHTML = `
-    <div class="hw-cell">
-      <div class="conf measured">measured</div>
-      <div class="label">${icon("cpu",15)} Processor</div>
-      <div class="value">${HW.cores || "?"}<span class="unit">cores</span></div>
-      <div class="detail">${cpuDetail}</div>
-    </div>
-    <div class="hw-cell">
-      <div class="conf ${HW.ramConf}">${confTxt[HW.ramConf]}</div>
-      <div class="label">${icon("memory-stick",15)} ${HW.unified ? "Unified Memory" : "Memory (RAM)"}</div>
-      <div class="value"><input type="number" id="ramInput" min="1" max="2048" step="1" value="${HW.ram}"><span class="unit">GB</span></div>
-      ${ramPresets}
-    </div>
-    <div class="hw-cell">
-      <div class="conf ${HW.vramConf}">${confTxt[HW.vramConf]}</div>
-      <div class="label">${icon("microchip",15)} Graphics memory (VRAM)</div>
-      <div class="value"><input type="number" id="vramInput" min="0" max="512" step="1" value="${HW.vram}"${HW.unified ? " disabled" : ""}><span class="unit">GB</span></div>
-      <div class="detail">${HW.unified ? `<span class="unified-tag">${icon("layers",13)} shared with RAM</span>` : "0 = no dedicated GPU"}</div>
-    </div>
-    <div class="hw-cell">
-      <div class="conf estimated">detected</div>
-      <div class="label">${icon("monitor",15)} Graphics card</div>
-      <div class="value" style="font-size:14.5px;line-height:1.3;font-weight:650;">${esc(HW.gpuName)}</div>
-      ${gpuSpec}
-      <div class="detail">
-        <label class="switch" style="font-size:12px;margin-top:4px;">
-          <input type="checkbox" id="unifiedToggle" ${HW.unified ? "checked" : ""}>
-          <span class="track"></span> Unified Memory (Apple / iGPU)
-        </label>
-      </div>
-    </div>`;
-
-  document.getElementById("ramInput").addEventListener("input", e => {
-    HW.ram = Math.max(1, parseFloat(e.target.value) || 1); HW.ramConf = "manual";
-    if (HW.unified) { HW.vram = HW.ram; document.getElementById("vramInput").value = HW.ram; }
-    document.querySelectorAll(".ram-chip").forEach(c => c.classList.toggle("active", +c.dataset.ram === HW.ram));
-    renderModels();
-  });
-  document.getElementById("vramInput").addEventListener("input", e => {
-    HW.vram = Math.max(0, parseFloat(e.target.value) || 0); HW.vramConf = "manual"; renderModels();
-  });
-  document.getElementById("unifiedToggle").addEventListener("change", e => {
-    HW.unified = e.target.checked; if (HW.unified) { HW.vram = HW.ram; }
-    renderHardware(); renderModels();
-  });
-  document.querySelectorAll(".ram-chip").forEach(chip => chip.addEventListener("click", () => {
-    HW.ram = +chip.dataset.ram; HW.ramConf = "manual";
-    if (HW.unified) HW.vram = HW.ram;
-    renderHardware(); renderModels();
-  }));
-}
-
-function benchHTML(m) {
-  if (m.source === "hf") return "";
-  const b = BENCH[m.name]; if (!b) return "";
-  const rows = [];
-  const add = (key, label) => { if (b[key] == null) return; const pct = Math.min(100, b[key]); rows.push(`<div class="bench-row"><span class="bench-l">${label}</span><span class="bench-bar"><i style="width:${pct}%"></i></span><span class="bench-v">${b[key]}</span></div>`); };
-  add("mmluPro", "MMLU-Pro"); add("gpqa", "GPQA-D"); add("swe", "SWE-bench");
-  if (!rows.length) return "";
-  return `<div class="bench"><div class="bench-head">${icon("chart-bar",13)} Benchmarks</div>${rows.join("")}</div>`;
-}
-
-function modelCardHTML(m) {
-  const { need, fit, active } = evaluate(m);
-  const isMoE = !!m.active;
-  const url = m.source === "hf" ? m.url : ("https://huggingface.co/" + m.hf);
-  const nameHTML = `<a href="${esc(url)}" target="_blank" rel="noopener" title="Open model card on HuggingFace">${esc(m.name)} ${icon("external-link",13)}</a>`;
-  const dl = m.downloads ? ` · ${icon("flame",12)} ${fmtDownloads(m.downloads)}` : "";
-
-  let cmds = "";
-  if (fit !== "no") {
-    const c = commandsFor(m);
-    cmds = `
-      <div class="cmds">
-        <div class="cmd"><span class="tool">Ollama</span><code>${esc(c.ollama)}</code><button class="copybtn" data-cmd="${esc(c.ollama)}" title="Copy">${icon("copy",14)}</button></div>
-        <div class="cmd"><span class="tool">LM Studio</span><code>${esc(c.lms)}</code><button class="copybtn" data-cmd="${esc(c.lms)}" title="Copy">${icon("copy",14)}</button></div>
-      </div>`;
-  }
-
-  return `
-    <div class="model ${fit}">
-      <div class="top">
-        <div>
-          <div class="name">${nameHTML}</div>
-          <div class="meta">${m.params}B params${isMoE ? ` · ${m.active}B active` : ""}${dl}</div>
-        </div>
-        <div class="cat">${esc(m.cat)}</div>
-      </div>
-      <div class="status ${fit}"><span class="sdot"></span>${statusLabel(fit)}</div>
-      ${benchHTML(m)}
-      ${cmds}
-      <div class="foot">
-        <span class="req">Needs <b>${fmtGB(need)}</b> · ${state.quant} · ${CTX_LABELS[CTX_STEPS.indexOf(state.ctx)]}</span>
-        <span class="speed-tag">${speedHTML(m, fit, active)}</span>
-      </div>
-    </div>`;
-}
-
-function renderModels() {
-  const baseList = state.source === "hf" ? state.hfModels : CURATED;
-  const evaluated = baseList.map(m => ({ m, ...evaluate(m) })).sort((a, b) => a.m.params - b.m.params);
-  const container = document.getElementById("models");
-
-  if (state.source === "hf" && !state.hfLoaded) {
-    container.innerHTML = `<div class="placeholder" style="grid-column:1/-1">Search above, or load the <b>Top models</b>.</div>`;
-  } else if (!evaluated.length) {
-    container.innerHTML = `<div class="placeholder" style="grid-column:1/-1">No models found. Try a different search term.</div>`;
-  } else {
-    const visible = evaluated.filter(x => !state.onlyFit || x.fit !== "no");
-    container.innerHTML = visible.length
-      ? visible.map(x => modelCardHTML(x.m)).join("")
-      : `<div class="placeholder" style="grid-column:1/-1">None of the models run with these settings. Turn off “Runnable only” or raise RAM / VRAM.</div>`;
-  }
-  renderSummary(evaluated);
-}
-
-function renderSummary(evaluated) {
-  const counts = { gpu: 0, cpu: 0, offload: 0, tight: 0, no: 0 };
-  evaluated.forEach(x => counts[x.fit]++);
-  const runnable = evaluated.filter(x => x.fit !== "no");
-  const best = runnable.length ? runnable[runnable.length - 1] : null;
-  const gpuBest = evaluated.filter(x => x.fit === "gpu");
-  const topGpu = gpuBest.length ? gpuBest[gpuBest.length - 1] : null;
-  const ctxLabel = CTX_LABELS[CTX_STEPS.indexOf(state.ctx)];
-
-  let headline;
-  if (!evaluated.length) headline = "No models loaded yet.";
-  else if (!runnable.length) headline = "These settings are a bit tight for this system.";
-  else if (topGpu) headline = `Your largest smooth model: <span style="color:var(--green)">${esc(topGpu.m.name)}</span>`;
-  else headline = `Largest runnable model: <span style="color:var(--blue)">${esc(best.m.name)}</span> (on the CPU)`;
-
-  const hwTxt = HW.unified
-    ? `${HW.chip ? "Apple " + HW.chip + " · " : ""}${fmtGB(HW.ram)} Unified Memory`
-    : `${fmtGB(HW.ram)} RAM${HW.vram > 0 ? ` · ${fmtGB(HW.vram)} VRAM` : " · no dedicated GPU"}`;
-
-  document.getElementById("summary").innerHTML = `
-    <h3>${headline}</h3>
-    <p>${state.source === "hf" ? "HuggingFace catalog" : "Curated catalog"} · <b>${state.quant}</b> · <b>${ctxLabel}</b> context · ${hwTxt}</p>
-    <div class="pill-row">
-      <span class="pill"><span class="sdot" style="background:var(--green)"></span><b>${counts.gpu}</b> on GPU</span>
-      <span class="pill"><span class="sdot" style="background:var(--blue)"></span><b>${counts.cpu}</b> on CPU</span>
-      <span class="pill"><span class="sdot" style="background:var(--amber)"></span><b>${counts.offload + counts.tight}</b> borderline</span>
-      <span class="pill"><span class="sdot" style="background:var(--red)"></span><b>${counts.no}</b> too large</span>
-    </div>`;
-}
-
-/* ===== Static text with icons ===== */
-function renderStaticChrome() {
-  document.getElementById("logoMark").innerHTML = `${icon("gauge",18)} llmradar`;
-  document.getElementById("checkBtn").innerHTML = `${icon("search",18)} Check my system`;
-  document.getElementById("hwTitle").innerHTML = `${icon("cpu",13)} Your hardware`;
-  document.getElementById("modelsTitle").innerHTML = `${icon("layers",13)} Models`;
-  document.getElementById("hwHint").innerHTML = `${icon("info",15)} <span>Browsers can't read RAM and VRAM exactly. The <b>estimated</b> values can be overridden above — recommendations update instantly.</span>`;
-  document.getElementById("lblSource").innerHTML = `${icon("layers",14)} Source`;
-  document.getElementById("lblQuant").innerHTML = `${icon("layers",14)} Quantization`;
-  document.getElementById("lblCtx").innerHTML = `${icon("sliders-horizontal",14)} Context`;
-  document.getElementById("hfTabBtn").innerHTML = `${icon("search",13)} HuggingFace`;
-  document.getElementById("hfSearchBtn").innerHTML = `${icon("search",14)} Search`;
-  document.getElementById("hfTopBtn").innerHTML = `${icon("flame",14)} Top models`;
-  document.getElementById("hfSearchIcon").innerHTML = icon("search", 16);
-
-  document.getElementById("notes").innerHTML = `
-    <summary>${icon("info",16)} How it's calculated &amp; what the limits are</summary>
-    <p><b>Memory needed:</b> model size ≈ params × bits-per-weight ÷ 8, plus the KV cache (scales with context length) and some runtime overhead. An 8B model in Q4_K_M needs ≈ 6–7 GB at 8K context, noticeably more at 32K.</p>
-    <p><b>Where it runs:</b> if everything fits in <b>VRAM</b> → fast on the GPU. If it only fits in <b>RAM</b> → runs on the CPU (slower). Apple Silicon shares RAM and GPU memory (Unified Memory), so total RAM counts there.</p>
-    <p><b>MoE models</b> (e.g. Qwen3-30B-A3B, gpt-oss, Mixtral) need memory for <i>all</i> experts but only compute with the <i>active</i> parameters — so they're much faster than their total size suggests.</p>
-    <p><b>Benchmarks:</b> figures are indicative numbers from public model reports (instruct / reasoning variants, ~2026) — MMLU-Pro (general), GPQA-Diamond (hard reasoning) and SWE-bench Verified (coding). Open a model's card for the authoritative numbers, or compare live on <a href="https://llm-stats.com" target="_blank" rel="noopener">llm-stats.com</a> and <a href="https://lmarena.ai" target="_blank" rel="noopener">LMArena</a>.</p>
-    <p><b>HuggingFace catalog:</b> parameter size is parsed from the model name (e.g. “…-8B-…”). Models with no detectable size are skipped. <code>ollama run hf.co/REPO:QUANT</code> pulls GGUF straight from HuggingFace; <code>lms get REPO</code> (or the in-app search) does the same in LM Studio.</p>
-    <p><b>Hardware detection:</b> on Apple Silicon the chip (e.g. “Apple M4”) is read from the GPU string and mapped to its P/E-core split, GPU cores, memory bandwidth and real RAM options — pick your config with the preset chips. On PCs the dedicated GPU is requested via WebGPU and matched against a VRAM/bandwidth table.</p>
-    <p><b>Speed (tok/s):</b> a rough decode-speed estimate = memory bandwidth ÷ active weights read per token. It's a ballpark, not a measured benchmark.</p>
-    <p><b>Limits:</b> browsers can't read RAM/VRAM exactly — <code>navigator.deviceMemory</code> is rounded (and often capped at 8 GB), VRAM is inferred from the GPU name. Correct any value manually if needed.</p>
-    <p>To actually run models: <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, <a href="https://lmstudio.ai" target="_blank" rel="noopener">LM Studio</a> or <a href="https://github.com/ggml-org/llama.cpp" target="_blank" rel="noopener">llama.cpp</a>.</p>`;
-
-  document.getElementById("footer").innerHTML = `
-    Estimates without guarantee · hardware analysis runs offline in your browser.<br>
-    Model data &amp; benchmarks from public sources &amp; HuggingFace.<br>
-    Typeface: Inter (SIL OFL 1.1) · Icons: Lucide (ISC) — both self-hosted.`;
-}
-
-function applyThemeIcon() {
-  const dark = document.documentElement.getAttribute("data-theme") !== "light";
-  document.getElementById("themeToggle").innerHTML = icon(dark ? "sun" : "moon", 19);
-}
-
-/* ===== Controls ===== */
-function initControls() {
-  const sel = document.getElementById("quant");
-  sel.innerHTML = Object.entries(QUANTS).map(([k, v]) => `<option value="${k}" ${k === state.quant ? "selected" : ""}>${v.label}</option>`).join("");
-  sel.addEventListener("change", e => { state.quant = e.target.value; renderModels(); });
-
-  document.getElementById("ctx").addEventListener("input", e => {
-    const idx = parseInt(e.target.value, 10);
-    state.ctx = CTX_STEPS[idx];
-    document.getElementById("ctxVal").textContent = CTX_LABELS[idx];
-    renderModels();
-  });
-  document.getElementById("onlyFit").addEventListener("change", e => { state.onlyFit = e.target.checked; renderModels(); });
-
-  document.querySelectorAll("#sourceTabs button").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll("#sourceTabs button").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.source = btn.dataset.src;
-      document.getElementById("hfBar").classList.toggle("hidden", state.source !== "hf");
-      if (state.source === "hf" && !state.hfLoaded) fetchHF(""); else renderModels();
-    });
-  });
-
-  document.getElementById("hfSearchBtn").addEventListener("click", () => fetchHF(document.getElementById("hfSearch").value.trim()));
-  document.getElementById("hfSearch").addEventListener("keydown", e => { if (e.key === "Enter") fetchHF(e.target.value.trim()); });
-  document.getElementById("hfTopBtn").addEventListener("click", () => { document.getElementById("hfSearch").value = ""; fetchHF(""); });
-
-  document.getElementById("models").addEventListener("click", e => {
-    const btn = e.target.closest(".copybtn"); if (!btn) return;
-    copyText(btn.dataset.cmd).then(() => {
-      const old = btn.innerHTML;
-      btn.innerHTML = icon("check", 14); btn.classList.add("done");
-      setTimeout(() => { btn.innerHTML = old; btn.classList.remove("done"); }, 1200);
-    });
-  });
-}
-
-/* ===== Theme toggle ===== */
-document.getElementById("themeToggle").addEventListener("click", () => {
-  const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", next);
-  try { localStorage.setItem("llmradar-theme", next); } catch (e) {}
-  applyThemeIcon();
-});
-
-/* ===== Start ===== */
-let initialized = false;
-document.getElementById("checkBtn").addEventListener("click", async function () {
-  const btn = this;
-  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Analyzing hardware …`;
-  await new Promise(r => setTimeout(r, 600));
-  await detectHardware();
-
-  document.getElementById("placeholderSection").classList.add("hidden");
-  ["hwSection", "ctrlSection", "summarySection", "modelSection"].forEach(id => document.getElementById(id).classList.remove("hidden"));
-
-  if (!initialized) { initControls(); initialized = true; }
-  renderHardware();
-  renderModels();
-
-  btn.disabled = false; btn.innerHTML = `${icon("search",18)} Re-scan`;
-  document.getElementById("hwSection").scrollIntoView({ behavior: "smooth", block: "start" });
-});
-
-/* ===== Init static chrome on load ===== */
-renderStaticChrome();
-applyThemeIcon();
-</script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
 </body>
 </html>
